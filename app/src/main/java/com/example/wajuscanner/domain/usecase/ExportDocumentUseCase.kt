@@ -57,6 +57,7 @@ class ExportDocumentUseCase @Inject constructor(
                 val pdfResult = pdfGenerator.generatePdf(pdfName, imagePaths, options)
                 pdfResult.fold(
                     onSuccess = { file ->
+                        documentRepository.markAsExported(documentId)
                         Result.success(pdfGenerator.getUriForFile(file))
                     },
                     onFailure = { e -> Result.failure(e) }
@@ -90,6 +91,7 @@ class ExportDocumentUseCase @Inject constructor(
             saveFileToMediaStore(pdf, document.name).fold(
                 onSuccess = { (uri, name) ->
                     pdf.delete() // clean cache copy; MediaStore holds the public copy
+                    documentRepository.markAsExported(documentId)
                     Result.success(uri to name)
                 },
                 onFailure = { e -> Result.failure(e) }

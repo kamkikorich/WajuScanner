@@ -28,5 +28,8 @@ abstract class AppDatabase : RoomDatabase() {
 val MIGRATION_1_2 = object : Migration(1, 2) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE documents ADD COLUMN status INTEGER NOT NULL DEFAULT 0")
+        // Dokumen lama (pra-ciri ini) sudah siap diexport — tanda sebagai EXPORTED
+        // supaya banner "Sambung imbasan" tidak memapar dokumen lama.
+        db.execSQL("UPDATE documents SET status = 1")
     }
 }
