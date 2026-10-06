@@ -10,6 +10,8 @@ data class Document(
     val pageCount: Int = 0,
     val thumbnailPath: String? = null,
     val isOcrProcessed: Boolean = false,
+    val status: com.example.wajuscanner.data.local.db.entity.DocumentStatus =
+        com.example.wajuscanner.data.local.db.entity.DocumentStatus.DRAFT,
 )
 
 data class Page(

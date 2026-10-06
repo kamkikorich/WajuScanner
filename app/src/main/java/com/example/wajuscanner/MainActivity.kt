@@ -20,6 +20,7 @@ import com.example.wajuscanner.ui.home.HomeViewModel
 import com.example.wajuscanner.ui.navigation.SmartScannerDestinations
 import com.example.wajuscanner.ui.ocr.OcrResultScreen
 import com.example.wajuscanner.ui.qr.QrScannerScreen
+import com.example.wajuscanner.ui.resume.ResumeScanScreen
 import com.example.wajuscanner.ui.scanner.ScannerScreen
 import com.example.wajuscanner.ui.settings.SettingsScreen
 import com.example.wajuscanner.ui.theme.WajuScannerTheme
@@ -58,6 +59,9 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onQrScanClick = {
                                     navController.navigate(SmartScannerDestinations.QrScanner)
+                                },
+                                onResumeDraft = { documentId ->
+                                    navController.navigate(SmartScannerDestinations.ResumeDraft(documentId))
                                 }
                             )
                         }
@@ -73,6 +77,20 @@ class MainActivity : ComponentActivity() {
 
                         composable<SmartScannerDestinations.QrScanner> {
                             QrScannerScreen(
+                                onNavigateBack = { navController.popBackStack() },
+                            )
+                        }
+
+                        composable<SmartScannerDestinations.ResumeDraft> { backStackEntry ->
+                            val destination = backStackEntry.toRoute<SmartScannerDestinations.ResumeDraft>()
+                            ResumeScanScreen(
+                                documentId = destination.documentId,
+                                onResume = { docId ->
+                                    navController.navigate(SmartScannerDestinations.Editor(docId)) {
+                                        popUpTo(SmartScannerDestinations.Home) { inclusive = false }
+                                    }
+                                },
+                                onDiscard = { navController.navigate(SmartScannerDestinations.Scanner) },
                                 onNavigateBack = { navController.popBackStack() },
                             )
                         }

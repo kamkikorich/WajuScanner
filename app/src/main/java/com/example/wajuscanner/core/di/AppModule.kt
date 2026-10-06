@@ -3,6 +3,7 @@ package com.example.wajuscanner.core.di
 import android.content.Context
 import androidx.room.Room
 import com.example.wajuscanner.data.local.db.AppDatabase
+import com.example.wajuscanner.data.local.db.MIGRATION_1_2
 import com.example.wajuscanner.data.local.db.dao.DocumentDao
 import com.example.wajuscanner.data.local.db.dao.OcrResultDao
 import com.example.wajuscanner.data.local.db.dao.PageDao
@@ -30,7 +31,9 @@ object AppModule {
             context,
             AppDatabase::class.java,
             "smart_scanner_db"
-        ).build()
+        )
+            .addMigrations(MIGRATION_1_2)
+            .build()
     }
 
     @Provides

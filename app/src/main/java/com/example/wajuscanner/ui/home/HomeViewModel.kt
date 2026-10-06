@@ -23,7 +23,7 @@ import javax.inject.Inject
  * with documents matched through their saved OCR text (flatMapLatest keeps
  * only the freshest search in flight). Blank query shows the full live list.
  */
-@OptIn(FlowPreview::class)
+@OptIn(FlowPreview::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val documentRepository: DocumentRepository
@@ -33,24 +33,32 @@ class HomeViewModel @Inject constructor(
 
     val uiState: StateFlow<HomeUiState> = combine(
         documentRepository.observeDocuments(),
+        documentRepository.observeDrafts(),
         searchQuery.debounce(200).distinctUntilChanged()
-    ) { documents, query -> documents to query }
-        .flatMapLatest { (documents, query) ->
+    ) { documents, drafts, query -> Triple(documents, drafts, query) }
+        .flatMapLatest { (documents, drafts, query) ->
+            val mostRecentDraft = drafts.maxByOrNull { it.updatedAt }
             if (query.isBlank()) {
                 flow {
                     emit(
                         when {
-                            documents.isEmpty() -> HomeUiState.Empty
-                            else -> HomeUiState.Success(documents, query)
+                            documents.isEmpty() -> HomeUiState.Empty(mostRecentDraft)
+                            else -> HomeUiState.Success(documents, query, mostRecentDraft)
                         }
                     )
                 }
             } else {
                 val nameHits = documents.filter { it.name.contains(query, ignoreCase = true) }
                 flow {
-                    emit(HomeUiState.Success(nameHits, query))
+                    emit(HomeUiState.Success(nameHits, query, mostRecentDraft))
                     val ocrDocs = documentRepository.searchIncludingOcr(query)
-                    emit(HomeUiState.Success((nameHits + ocrDocs).distinctBy { it.id }, query))
+                    emit(
+                        HomeUiState.Success(
+                            (nameHits + ocrDocs).distinctBy { it.id },
+                            query,
+                            mostRecentDraft,
+                        )
+                    )
                 }
             }
         }
@@ -62,6 +70,10 @@ class HomeViewModel @Inject constructor(
 
     fun onSearchQueryChange(query: String) {
         searchQuery.value = query
+    }
+
+    fun deleteDraft(id: Long) {
+        viewModelScope.launch { documentRepository.deleteDocument(id) }
     }
 
     fun renameDocument(id: Long, newName: String) {

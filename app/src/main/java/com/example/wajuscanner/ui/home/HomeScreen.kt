@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,6 +20,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -65,6 +67,7 @@ fun HomeScreen(
     onDocumentClick: (Long) -> Unit,
     onSettingsClick: () -> Unit,
     onQrScanClick: () -> Unit,
+    onResumeDraft: (Long) -> Unit,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -104,14 +107,32 @@ fun HomeScreen(
         ) {
             when (val currentState = state) {
                 is HomeUiState.Loading -> LoadingContent()
-                is HomeUiState.Empty -> EmptyContent(onScanClick = onScanClick)
-                is HomeUiState.Success -> DocumentListContent(
-                    state = currentState,
-                    onSearchQueryChange = viewModel::onSearchQueryChange,
-                    onDocumentClick = onDocumentClick,
-                    onRename = viewModel::renameDocument,
-                    onDeleteClick = viewModel::deleteDocument
-                )
+                is HomeUiState.Empty -> {
+                    currentState.mostRecentDraft?.let { draft ->
+                        ResumeDraftBanner(
+                            draft = draft,
+                            onResume = { onResumeDraft(draft.id) },
+                            onDiscard = { viewModel.deleteDraft(draft.id) },
+                        )
+                    }
+                    EmptyContent(onScanClick = onScanClick)
+                }
+                is HomeUiState.Success -> {
+                    currentState.mostRecentDraft?.let { draft ->
+                        ResumeDraftBanner(
+                            draft = draft,
+                            onResume = { onResumeDraft(draft.id) },
+                            onDiscard = { viewModel.deleteDraft(draft.id) },
+                        )
+                    }
+                    DocumentListContent(
+                        state = currentState,
+                        onSearchQueryChange = viewModel::onSearchQueryChange,
+                        onDocumentClick = onDocumentClick,
+                        onRename = viewModel::renameDocument,
+                        onDeleteClick = viewModel::deleteDocument
+                    )
+                }
                 is HomeUiState.Error -> ErrorContent(message = currentState.message)
             }
         }
@@ -144,6 +165,40 @@ private fun EmptyContent(onScanClick: () -> Unit) {
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 32.dp)
             )
+        }
+    }
+}
+
+@Composable
+private fun ResumeDraftBanner(
+    draft: com.example.wajuscanner.domain.model.Document,
+    onResume: () -> Unit,
+    onDiscard: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+        ),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Imbasan belum selesai",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+            Text(
+                text = draft.name,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+            androidx.compose.foundation.layout.Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                TextButton(onClick = onDiscard) { Text("Buang") }
+                Button(onClick = onResume) { Text("Sambung") }
+            }
         }
     }
 }
@@ -337,6 +392,7 @@ private fun HomeScreenEmptyPreview() {
             onDocumentClick = {},
             onSettingsClick = {},
             onQrScanClick = {},
+            onResumeDraft = {},
         )
     }
 }
@@ -357,10 +413,13 @@ private fun previewHomeViewModel(): HomeViewModel {
 private class PreviewDocumentRepository : DocumentRepository {
     override fun observeDocuments() = flowOf(emptyList<Document>())
     override fun searchDocuments(query: String) = flowOf(emptyList<Document>())
+    override fun observeDrafts() = flowOf(emptyList<Document>())
+    override suspend fun getMostRecentDraft(): Document? = null
     override suspend fun getDocumentById(id: Long): Document? = null
     override suspend fun getPagesForDocument(documentId: Long) = emptyList<Page>()
     override suspend fun createDocument(name: String) = 1L
     override suspend fun renameDocument(id: Long, newName: String) = true
     override suspend fun deleteDocument(id: Long) = true
+    override suspend fun markAsExported(id: Long) = true
     override suspend fun searchIncludingOcr(query: String): List<Document> = emptyList()
 }

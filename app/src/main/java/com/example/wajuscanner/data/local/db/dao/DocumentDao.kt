@@ -18,6 +18,12 @@ interface DocumentDao {
     @Query("SELECT * FROM documents WHERE name LIKE '%' || :query || '%' ORDER BY updatedAt DESC")
     fun search(query: String): Flow<List<DocumentEntity>>
 
+    @Query("SELECT * FROM documents WHERE status = :status ORDER BY updatedAt DESC")
+    fun observeByStatus(status: Int): Flow<List<DocumentEntity>>
+
+    @Query("SELECT * FROM documents WHERE status = :status ORDER BY updatedAt DESC LIMIT 1")
+    suspend fun getMostRecentByStatus(status: Int): DocumentEntity?
+
     @Query("SELECT * FROM documents WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): DocumentEntity?
 

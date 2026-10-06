@@ -15,5 +15,7 @@ data class DocumentEntity(
     val name: String,
     val createdAt: Date,
     val updatedAt: Date,
-    val isOcrProcessed: Boolean = false
+    val isOcrProcessed: Boolean = false,
+    @androidx.room.ColumnInfo(defaultValue = "0")
+    val status: Int = DocumentStatus.DRAFT.value,
 )

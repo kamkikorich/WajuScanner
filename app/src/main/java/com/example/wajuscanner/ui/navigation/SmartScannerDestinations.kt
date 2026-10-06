@@ -22,6 +22,9 @@ sealed interface SmartScannerDestinations {
     data class Detail(val documentId: Long) : SmartScannerDestinations
 
     @Serializable
+    data class ResumeDraft(val documentId: Long) : SmartScannerDestinations
+
+    @Serializable
     data class OcrResult(val pageId: Long) : SmartScannerDestinations
 
     @Serializable

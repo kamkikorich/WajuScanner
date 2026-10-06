@@ -71,6 +71,26 @@ class DocumentRepositoryImpl @Inject constructor(
         return deletedRows > 0
     }
 
+    override fun observeDrafts(): Flow<List<Document>> =
+        documentDao.observeByStatus(com.example.wajuscanner.data.local.db.entity.DocumentStatus.DRAFT.value)
+            .map { list -> list.map { it.toDomain(pageCount = 0) } }
+
+    override suspend fun getMostRecentDraft(): Document? =
+        documentDao.getMostRecentByStatus(
+            com.example.wajuscanner.data.local.db.entity.DocumentStatus.DRAFT.value
+        )?.toDomain(0)
+
+    override suspend fun markAsExported(id: Long): Boolean {
+        val entity = documentDao.getById(id) ?: return false
+        documentDao.update(
+            entity.copy(
+                status = com.example.wajuscanner.data.local.db.entity.DocumentStatus.EXPORTED.value,
+                updatedAt = Date(),
+            )
+        )
+        return true
+    }
+
     override suspend fun searchIncludingOcr(query: String): List<Document> {
         val trimmed = query.trim()
         if (trimmed.isEmpty()) return emptyList()
@@ -130,7 +150,8 @@ class DocumentRepositoryImpl @Inject constructor(
         createdAt = createdAt,
         updatedAt = updatedAt,
         pageCount = pageCount,
-        isOcrProcessed = isOcrProcessed
+        isOcrProcessed = isOcrProcessed,
+        status = com.example.wajuscanner.data.local.db.entity.DocumentStatus.fromInt(status),
     )
 
     private fun PageEntity.toDomain(): Page = Page(
