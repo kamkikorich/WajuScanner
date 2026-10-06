@@ -1,0 +1,77 @@
+<resources>
+    <string name="app_name">WajuScanner</string>
+
+    <!-- Accessibility / content descriptions -->
+    <string name="cd_scan_document">Scan a new document</string>
+    <string name="cd_settings">Open settings</string>
+    <string name="cd_rename_document">Rename document</string>
+    <string name="cd_delete_document">Delete document</string>
+
+    <!-- Home screen -->
+    <string name="home_empty_title">No documents yet</string>
+    <string name="home_empty_subtitle">Tap the + button to scan your first document. Your scans stay on this device.</string>
+    <string name="home_search_hint">Search documents</string>
+    <string name="home_document_meta">%1$d pages · %2$s</string>
+
+    <!-- Scanner screen -->
+    <string name="scanner_title">Scan Document</string>
+    <string name="scanner_ready_title">Ready to scan</string>
+    <string name="scanner_ready_subtitle">Position your document in the frame. The scanner will detect edges automatically.</string>
+    <string name="scanner_processing">Saving scanned pages…</string>
+    <string name="scanner_button_start">Start Scanner</string>
+    <string name="scanner_button_retry">Try Again</string>
+    <string name="scanner_button_back">Back to Library</string>
+    <string name="scanner_id_mode_label">Mod Kad ID</string>
+    <string name="scanner_id_mode_hint">Scan bahagian DEPAN kad, kemudian bahagian BELAKANG. Kedua-duanya digabung menjadi SATU page sahaja.</string>
+    <string name="cd_back">Go back</string>
+
+    <!-- Editor screen -->
+    <string name="editor_title">Edit Page</string>
+    <string name="editor_rotate">Rotate page</string>
+    <string name="editor_image_preview">Page preview</string>
+    <string name="editor_button_save">Save Changes</string>
+
+    <!-- Preview / Document detail screen -->
+    <string name="preview_title">Document Pages</string>
+    <string name="preview_add_page">Add page</string>
+    <string name="preview_page_image">Page %1$d preview</string>
+    <string name="preview_page_number">Page %1$d</string>
+    <string name="preview_duplicate_page">Duplicate page</string>
+    <string name="preview_edit_page">Edit page</string>
+    <string name="preview_delete_page">Delete page</string>
+
+    <!-- Document detail -->
+    <string name="detail_title">Document</string>
+    <string name="detail_share">Share document</string>
+    <string name="detail_add_page">Add page</string>
+    <string name="detail_meta">%1$d pages · %2$s</string>
+
+    <!-- Export dialog -->
+    <string name="export_title">Export PDF</string>
+    <string name="export_page_size">Page size</string>
+    <string name="export_orientation">Orientation</string>
+    <string name="export_generating">Generating PDF…</string>
+    <string name="export_save">Save to Documents</string>
+    <string name="export_share">Share</string>
+
+    <!-- Rename dialog -->
+    <string name="rename_title">Rename document</string>
+    <string name="rename_hint">Document name</string>
+    <string name="rename_confirm">Rename</string>
+    <string name="rename_cancel">Cancel</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_storage_title">Storage</string>
+    <string name="settings_storage_used">Used: %1$s</string>
+    <string name="settings_document_count">%1$d documents</string>
+    <string name="settings_privacy_title">Privacy</string>
+    <string name="settings_privacy_body">All scans, OCR and PDF processing happen entirely on this device. No data ever leaves your phone.</string>
+    <string name="settings_version">WajuScanner %1$s</string>
+
+    <!-- OCR -->
+    <string name="ocr_title">Text Recognition</string>
+    <string name="ocr_running">Reading text…</string>
+    <string name="ocr_empty">No readable text found on this page</string>
+    <string name="ocr_copy">Copy text</string>
+</resources>
