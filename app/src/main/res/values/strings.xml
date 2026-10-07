@@ -22,7 +22,10 @@
     <string name="scanner_button_retry">Try Again</string>
     <string name="scanner_button_back">Back to Library</string>
     <string name="scanner_id_mode_label">Mod Kad ID</string>
-    <string name="scanner_id_mode_hint">Scan bahagian DEPAN kad, kemudian bahagian BELAKANG. Kedua-duanya digabung menjadi SATU page sahaja.</string>
+    <string name="scanner_id_mode_hint">Scan bahagian DEPAN kad, kemudian bahagian BELAKANG. Kedua-duanya digabung menjadi SATU page dengan label FRONT/BACK.</string>
+    <string name="scanner_id_layout_vertical">Atas / Bawah</string>
+    <string name="scanner_id_layout_horizontal">Kiri / Kanan</string>
+    <string name="scanner_id_naming_hint">Nama dokumen akan diisi automatik dari teks kad jika dapat dibaca.</string>
     <string name="cd_back">Go back</string>
 
     <!-- Editor screen -->

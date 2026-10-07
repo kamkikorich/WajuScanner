@@ -19,6 +19,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -43,6 +44,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.wajuscanner.R
 import com.example.wajuscanner.camera.ScannerLauncher
 import com.example.wajuscanner.camera.ScannerResult
+import com.example.wajuscanner.domain.usecase.IdCardLayout
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,6 +55,7 @@ fun ScannerScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var idCardMode by remember { mutableStateOf(false) }
+    var idCardLayout by remember { mutableStateOf(IdCardLayout.VERTICAL) }
     // Launcher didaftar melalui rememberLauncherForActivityResult — register
     // berlaku pada NavBackStackEntry (bukan Activity), jadi selamat dipanggil
     // semasa navigasi walaupun Activity sudah RESUMED.
@@ -105,9 +108,14 @@ fun ScannerScreen(
                 is ScannerUiState.Launching -> {
                     ScannerIdleContent(
                         idCardMode = idCardMode,
+                        idCardLayout = idCardLayout,
                         onToggleIdCardMode = {
                             idCardMode = !idCardMode
                             viewModel.setIdCardMode(idCardMode)
+                        },
+                        onLayoutSelected = { layout ->
+                            idCardLayout = layout
+                            viewModel.setIdCardLayout(layout)
                         },
                         onScanClick = { launchScan() }
                     )
@@ -143,7 +151,9 @@ fun ScannerScreen(
 @Composable
 private fun ScannerIdleContent(
     idCardMode: Boolean,
+    idCardLayout: IdCardLayout,
     onToggleIdCardMode: () -> Unit,
+    onLayoutSelected: (IdCardLayout) -> Unit,
     onScanClick: () -> Unit
 ) {
     Column(
@@ -179,6 +189,34 @@ private fun ScannerIdleContent(
                 style = MaterialTheme.typography.bodySmall,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 32.dp)
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(horizontal = 32.dp)
+            ) {
+                IdCardLayout.entries.forEach { layout ->
+                    FilterChip(
+                        selected = idCardLayout == layout,
+                        onClick = { onLayoutSelected(layout) },
+                        label = {
+                            Text(
+                                text = stringResource(
+                                    when (layout) {
+                                        IdCardLayout.VERTICAL -> R.string.scanner_id_layout_vertical
+                                        IdCardLayout.HORIZONTAL -> R.string.scanner_id_layout_horizontal
+                                    }
+                                )
+                            )
+                        }
+                    )
+                }
+            }
+            Text(
+                text = stringResource(R.string.scanner_id_naming_hint),
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 32.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Button(onClick = onScanClick) {

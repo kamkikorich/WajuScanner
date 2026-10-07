@@ -1,24 +1,32 @@
 package com.example.wajuscanner.ui.scanner
 
 import android.app.Activity
+import android.app.Application
 import android.content.IntentSender
-import androidx.lifecycle.ViewModel
+import android.net.Uri
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.wajuscanner.camera.ScannerLauncher
 import com.example.wajuscanner.camera.ScannerResult
+import com.example.wajuscanner.core.common.Constants
 import com.example.wajuscanner.core.util.FileUtils
+import com.example.wajuscanner.core.util.IdCardNameExtractor
+import com.example.wajuscanner.domain.usecase.IdCardLayout
 import com.example.wajuscanner.domain.usecase.ScanDocumentUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
 class ScannerViewModel @Inject constructor(
+    application: Application,
     private val scannerLauncher: ScannerLauncher,
-    private val scanDocumentUseCase: ScanDocumentUseCase
-) : ViewModel() {
+    private val scanDocumentUseCase: ScanDocumentUseCase,
+) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow<ScannerUiState>(ScannerUiState.Idle)
     val uiState: StateFlow<ScannerUiState> = _uiState
@@ -26,8 +34,15 @@ class ScannerViewModel @Inject constructor(
     /** When true, the scanner runs in ID-card mode: 2 sides combined into ONE page. */
     private var idCardMode: Boolean = false
 
+    /** Layout used when [idCardMode] is on. Defaults to vertical (top/bottom). */
+    private var idCardLayout: IdCardLayout = IdCardLayout.VERTICAL
+
     fun setIdCardMode(enabled: Boolean) {
         idCardMode = enabled
+    }
+
+    fun setIdCardLayout(layout: IdCardLayout) {
+        idCardLayout = layout
     }
 
     fun startScan(activity: Activity, onIntentReady: (IntentSender) -> Unit) {
@@ -77,9 +92,23 @@ class ScannerViewModel @Inject constructor(
     private fun persistScannedPages(pageUris: List<String>) {
         _uiState.value = ScannerUiState.Processing
         viewModelScope.launch {
-            val documentName = FileUtils.generateScanFileName()
+            val baseName = FileUtils.generateScanFileName(
+                if (idCardMode) "ID_Card" else Constants.DEFAULT_FILE_PREFIX
+            )
+            val documentName = if (idCardMode && pageUris.isNotEmpty()) {
+                val suggested = withContext(Dispatchers.IO) {
+                    runCatching {
+                        IdCardNameExtractor.suggest(
+                            getApplication(),
+                            Uri.parse(pageUris[0])
+                        )
+                    }.getOrNull()
+                }
+                if (!suggested.isNullOrBlank()) "ID_$suggested" else baseName
+            } else baseName
+
             val outcome = if (idCardMode) {
-                scanDocumentUseCase.invokeIdCardMode(documentName, pageUris)
+                scanDocumentUseCase.invokeIdCardMode(documentName, pageUris, idCardLayout)
             } else {
                 scanDocumentUseCase(documentName, pageUris)
             }

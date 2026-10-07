@@ -15,6 +15,14 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
 
+/** How the two ID-card sides are arranged on the single output bitmap. */
+enum class IdCardLayout {
+    /** Front on top, back on bottom — default for narrow cards (MyKad, passport inner). */
+    VERTICAL,
+    /** Front on the left, back on the right — better for wide cards (driver's license). */
+    HORIZONTAL,
+}
+
 class ScanDocumentUseCase @Inject constructor(
     @ApplicationContext private val context: Context,
     private val documentRepository: DocumentRepositoryImpl,
@@ -78,12 +86,16 @@ class ScanDocumentUseCase @Inject constructor(
 
     /**
      * ID-card mode: exactly two scanned sides (front + back) are combined
-     * vertically into a SINGLE page (NAPS2-style "Combine"). Returns the new
-     * document id and its one Page.
+     * into a SINGLE page (NAPS2-style "Combine") with a small FRONT/BACK
+     * badge drawn on each side so the two halves stay identifiable once
+     * combined. The orientation (vertical or horizontal) is controlled by
+     * [layout] — vertical is the default and matches Malaysian IC / passport
+     * inner pages, horizontal reads better for wide driver's licenses.
      */
     suspend fun invokeIdCardMode(
         documentName: String,
-        pageUris: List<String>
+        pageUris: List<String>,
+        layout: IdCardLayout = IdCardLayout.VERTICAL,
     ): Result<Pair<Long, List<Page>>> = withContext(Dispatchers.IO) {
         try {
             if (pageUris.size < 2) {
@@ -96,7 +108,19 @@ class ScanDocumentUseCase @Inject constructor(
             val back = ImageUtils.loadBitmapFromUri(context, Uri.parse(pageUris[1]))
                 ?: return@withContext Result.failure(IllegalStateException("Failed to load back side"))
 
-            val combined = ImageUtils.combineVertical(front, back)
+            val frontLabeled = ImageUtils.watermarkLabel(front, "FRONT")
+            front.recycle()
+            val backLabeled = ImageUtils.watermarkLabel(back, "BACK")
+            back.recycle()
+
+            val combined = when (layout) {
+                IdCardLayout.VERTICAL ->
+                    ImageUtils.combineVertical(frontLabeled, backLabeled)
+                IdCardLayout.HORIZONTAL ->
+                    ImageUtils.combineHorizontal(frontLabeled, backLabeled)
+            }
+            frontLabeled.recycle()
+            backLabeled.recycle()
 
             val documentId = documentRepository.createDocument(documentName)
             val (imageFile, thumbnailFile) = storage.savePageImage(

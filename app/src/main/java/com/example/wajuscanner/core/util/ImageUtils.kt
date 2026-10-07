@@ -2,7 +2,13 @@ package com.example.wajuscanner.core.util
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Matrix
+import android.graphics.Paint
+import android.graphics.Rect
+import android.graphics.RectF
+import android.graphics.Typeface
 import android.net.Uri
 import androidx.exifinterface.media.ExifInterface
 import com.example.wajuscanner.core.common.Constants
@@ -13,6 +19,8 @@ import kotlin.math.max
 import kotlin.math.min
 
 object ImageUtils {
+
+    private enum class CombineOrientation { VERTICAL, HORIZONTAL }
 
     /**
      * Loads a downsampled bitmap from a file path, respecting max dimension limits to avoid OOM.
@@ -96,20 +104,77 @@ object ImageUtils {
 
     /**
      * Combines two bitmaps vertically (top = [top], bottom = [bottom]) into a
-     * single bitmap, scaled to a common width. Used for ID-card mode: front and
-     * back of the card on ONE page (same approach as NAPS2 "Combine").
+     * single bitmap, scaled to a common width. Used for ID-card mode: front
+     * and back of the card on ONE page (same approach as NAPS2 "Combine").
      */
     fun combineVertical(top: Bitmap, bottom: Bitmap, dividerPx: Int = 8): Bitmap {
-        val targetWidth = min(top.width, bottom.width)
-        val topScaled = scaleToWidth(top, targetWidth)
-        val bottomScaled = scaleToWidth(bottom, targetWidth)
+        return combine(listOf(top, bottom), CombineOrientation.VERTICAL, dividerPx)
+    }
 
-        val totalHeight = topScaled.height + dividerPx + bottomScaled.height
-        val combined = Bitmap.createBitmap(targetWidth, totalHeight, Bitmap.Config.ARGB_8888)
-        val canvas = android.graphics.Canvas(combined)
-        canvas.drawColor(android.graphics.Color.WHITE)
-        canvas.drawBitmap(topScaled, 0f, 0f, null)
-        canvas.drawBitmap(bottomScaled, 0f, (topScaled.height + dividerPx).toFloat(), null)
+    /**
+     * Combines two bitmaps horizontally ([left], [right]) into a single bitmap,
+     * scaled to a common height. Useful for wide-format ID cards (driver's
+     * license) where the front and back read better side-by-side.
+     */
+    fun combineHorizontal(left: Bitmap, right: Bitmap, dividerPx: Int = 8): Bitmap {
+        return combine(listOf(left, right), CombineOrientation.HORIZONTAL, dividerPx)
+    }
+
+    /**
+     * Combines any number of bitmaps in the given orientation onto a single
+     * bitmap with a uniform background and equal-sided dividers between them.
+     * All bitmaps are scaled to a common dimension (width for vertical, height
+     * for horizontal) so the final canvas is rectangular and predictable.
+     */
+    private fun combine(
+        bitmaps: List<Bitmap>,
+        orientation: CombineOrientation,
+        dividerPx: Int,
+    ): Bitmap {
+        require(bitmaps.isNotEmpty()) { "combine requires at least one bitmap" }
+        if (bitmaps.size == 1) return bitmaps.first()
+
+        val isVertical = orientation == CombineOrientation.VERTICAL
+        val targetDim = if (isVertical) {
+            bitmaps.minOf { it.width }
+        } else {
+            bitmaps.minOf { it.height }
+        }
+
+        val scaled = bitmaps.map { src ->
+            if (isVertical) scaleToWidth(src, targetDim) else scaleToHeight(src, targetDim)
+        }
+
+        val totalCrossDim = scaled.sumOf { if (isVertical) it.height else it.width }
+        val totalDivider = dividerPx * (scaled.size - 1)
+
+        val canvasWidth: Int
+        val canvasHeight: Int
+        if (isVertical) {
+            canvasWidth = targetDim
+            canvasHeight = totalCrossDim + totalDivider
+        } else {
+            canvasWidth = totalCrossDim + totalDivider
+            canvasHeight = targetDim
+        }
+
+        val combined = Bitmap.createBitmap(canvasWidth, canvasHeight, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(combined)
+        canvas.drawColor(Color.WHITE)
+
+        var cursor = 0
+        scaled.forEachIndexed { index, bmp ->
+            val offset: Int
+            if (isVertical) {
+                canvas.drawBitmap(bmp, 0f, cursor.toFloat(), null)
+                offset = bmp.height
+            } else {
+                canvas.drawBitmap(bmp, cursor.toFloat(), 0f, null)
+                offset = bmp.width
+            }
+            cursor += offset
+            if (index < scaled.size - 1) cursor += dividerPx
+        }
         return combined
     }
 
@@ -117,6 +182,59 @@ object ImageUtils {
         if (bitmap.width == targetWidth) return bitmap
         val newHeight = (bitmap.height.toLong() * targetWidth / bitmap.width).toInt()
         return Bitmap.createScaledBitmap(bitmap, targetWidth, newHeight.coerceAtLeast(1), true)
+    }
+
+    private fun scaleToHeight(bitmap: Bitmap, targetHeight: Int): Bitmap {
+        if (bitmap.height == targetHeight) return bitmap
+        val newWidth = (bitmap.width.toLong() * targetHeight / bitmap.height).toInt()
+        return Bitmap.createScaledBitmap(bitmap, newWidth.coerceAtLeast(1), targetHeight, true)
+    }
+
+    /**
+     * Draws a small semi-transparent label badge in the top-left corner of
+     * [source] so the front/back sides of an ID card stay identifiable once
+     * combined into a single page. The badge is drawn directly onto a copy of
+     * the source so the caller's bitmap stays untouched. Returns a NEW bitmap;
+     * callers own its lifecycle.
+     */
+    fun watermarkLabel(source: Bitmap, label: String): Bitmap {
+        val padding = (source.width * 0.018f).toInt().coerceAtLeast(8)
+        val textSize = (source.width * 0.04f).coerceAtLeast(24f)
+        val badgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(170, 0, 0, 0)
+            style = Paint.Style.FILL
+        }
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            this.textSize = textSize
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+
+        val bounds = Rect()
+        textPaint.getTextBounds(label, 0, label.length, bounds)
+        val badgeWidth = bounds.width() + padding * 2
+        val badgeHeight = (bounds.height() + padding * 1.5f).toInt()
+
+        val out = Bitmap.createBitmap(source.width, source.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(out)
+        canvas.drawBitmap(source, 0f, 0f, null)
+        val badgeTop = padding
+        canvas.drawRoundRect(
+            padding.toFloat(),
+            badgeTop.toFloat(),
+            (padding + badgeWidth).toFloat(),
+            (badgeTop + badgeHeight).toFloat(),
+            padding.toFloat(),
+            padding.toFloat(),
+            badgePaint,
+        )
+        canvas.drawText(
+            label,
+            (padding + padding).toFloat(),
+            (badgeTop + badgeHeight - padding * 0.6f).toFloat(),
+            textPaint,
+        )
+        return out
     }
 
     /** Loads a downscaled, EXIF-corrected bitmap directly from a content URI. */
