@@ -65,6 +65,12 @@ class DocumentRepositoryImplTest {
         override fun search(query: String): Flow<List<DocumentEntity>> =
             flowOf(items.filter { it.name.contains(query, ignoreCase = true) })
 
+        override fun observeByStatus(status: Int): Flow<List<DocumentEntity>> =
+            flowOf(items.filter { it.status == status })
+
+        override suspend fun getMostRecentByStatus(status: Int): DocumentEntity? =
+            items.filter { it.status == status }.maxByOrNull { it.updatedAt }
+
         override suspend fun getById(id: Long): DocumentEntity? = items.find { it.id == id }
 
         override suspend fun insert(document: DocumentEntity): Long {
