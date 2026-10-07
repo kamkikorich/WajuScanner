@@ -44,6 +44,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.wajuscanner.R
 import com.example.wajuscanner.core.util.FileUtils
+import com.example.wajuscanner.domain.model.PdfCompressionMode
 import com.example.wajuscanner.domain.model.PdfOptions
 import com.example.wajuscanner.domain.model.PdfOrientation
 import com.example.wajuscanner.domain.model.PdfPageSize
@@ -171,6 +172,7 @@ fun DocumentDetailScreen(
             isExporting = exportState is DocumentExportState.Exporting,
             onPageSizeChange = exportViewModel::setPageSize,
             onOrientationChange = exportViewModel::setOrientation,
+            onCompressionChange = exportViewModel::setCompression,
             onDismiss = { showExportDialog = false },
             onShare = {
                 showExportDialog = false
@@ -190,6 +192,7 @@ private fun ExportOptionsDialog(
     isExporting: Boolean,
     onPageSizeChange: (PdfPageSize) -> Unit,
     onOrientationChange: (PdfOrientation) -> Unit,
+    onCompressionChange: (PdfCompressionMode) -> Unit,
     onDismiss: () -> Unit,
     onShare: () -> Unit,
     onSave: () -> Unit
@@ -216,6 +219,26 @@ private fun ExportOptionsDialog(
                             selected = options.orientation == o,
                             onClick = { onOrientationChange(o) },
                             label = { Text(o.name.lowercase().replaceFirstChar { it.uppercase() }) }
+                        )
+                    }
+                }
+                Text(stringResource(R.string.export_compression), style = MaterialTheme.typography.labelMedium)
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    PdfCompressionMode.entries.forEach { mode ->
+                        FilterChip(
+                            selected = options.compression == mode,
+                            onClick = { onCompressionChange(mode) },
+                            label = {
+                                Text(
+                                    text = stringResource(
+                                        when (mode) {
+                                            PdfCompressionMode.FULL -> R.string.export_compression_full
+                                            PdfCompressionMode.COMPRESS -> R.string.export_compression_compress
+                                            PdfCompressionMode.COMPRESS_GRAYSCALE -> R.string.export_compression_grayscale
+                                        }
+                                    )
+                                )
+                            }
                         )
                     }
                 }

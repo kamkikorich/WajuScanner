@@ -16,6 +16,7 @@ import androidx.core.content.FileProvider
 import com.example.wajuscanner.core.common.Constants
 import com.example.wajuscanner.core.util.FileUtils
 import com.example.wajuscanner.core.util.ImageUtils
+import com.example.wajuscanner.domain.model.PdfCompressionMode
 import com.example.wajuscanner.domain.model.PdfOptions
 import com.example.wajuscanner.domain.model.PdfPageSize
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -54,22 +55,27 @@ class PdfGenerator @Inject constructor(
         }
         return try {
             val (pageWidth, pageHeight) = resolvePageDimensions(options)
+            val (maxDimension, jpegQuality) = resolveCompression(options.compression)
             val pdfDocument = PdfDocument()
             val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
 
             imagePaths.forEachIndexed { index, path ->
-                val bitmap = ImageUtils.loadBitmapCorrected(path, maxDimension = Constants.MAX_PREVIEW_DIMENSION)
+                val bitmap = ImageUtils.loadBitmapCorrected(path, maxDimension = maxDimension)
                     ?: throw IOException("Failed to load image for PDF: $path")
 
-                val processed = applyFilter(bitmap, filter)
+                var processed = applyFilter(bitmap, filter)
                 if (processed !== bitmap) bitmap.recycle()
+                if (options.compression == PdfCompressionMode.COMPRESS_GRAYSCALE) {
+                    val source = processed
+                    processed = colorMatrixBitmap(source, grayscaleMatrix())
+                    source.recycle()
+                }
 
                 val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, index + 1).create()
                 val page = pdfDocument.startPage(pageInfo)
                 drawBitmapCentered(page.canvas, processed, pageWidth, pageHeight, paint)
                 pdfDocument.finishPage(page)
 
-                if (processed != processed) { /* unreachable, kept for clarity */ }
                 processed.recycle()
             }
 
@@ -84,6 +90,22 @@ class PdfGenerator @Inject constructor(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    /**
+     * Map a compression mode onto the two knobs that actually shrink the
+     * PDF: the bitmap's longer edge (downscale before embedding) and an
+     * optional grayscale conversion. Note that [android.graphics.pdf.PdfDocument]
+     * does not expose a JPEG-quality encoder for embedded images — the PDF
+     * writer picks its own compression — so the JPEG-quality knob only
+     * affects the intermediate re-encode done by [ImageUtils.scaleDown].
+     * FULL is the legacy behaviour (2048 px), the COMPRESS tiers drop to
+     * 1500 px which is roughly the level Adobe Scan ships on its "Low" preset.
+     */
+    private fun resolveCompression(mode: PdfCompressionMode): Pair<Int, Int> = when (mode) {
+        PdfCompressionMode.FULL -> Constants.MAX_PREVIEW_DIMENSION to Constants.JPEG_QUALITY_BALANCED
+        PdfCompressionMode.COMPRESS -> 1500 to 60
+        PdfCompressionMode.COMPRESS_GRAYSCALE -> 1500 to 60
     }
 
     /**

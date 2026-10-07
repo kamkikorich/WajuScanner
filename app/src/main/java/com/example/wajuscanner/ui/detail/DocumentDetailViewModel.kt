@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.wajuscanner.domain.model.PdfCompressionMode
 import com.example.wajuscanner.domain.model.PdfOptions
 import com.example.wajuscanner.domain.model.PdfOrientation
 import com.example.wajuscanner.domain.model.PdfPageSize
@@ -76,6 +77,10 @@ class DocumentDetailViewModel @Inject constructor(
 
     fun setOrientation(orientation: PdfOrientation) {
         _pdfOptions.value = _pdfOptions.value.copy(orientation = orientation)
+    }
+
+    fun setCompression(mode: PdfCompressionMode) {
+        _pdfOptions.value = _pdfOptions.value.copy(compression = mode)
     }
 
     fun consumeExportEvent() {

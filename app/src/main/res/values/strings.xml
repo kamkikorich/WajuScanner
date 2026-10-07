@@ -53,6 +53,10 @@
     <string name="export_title">Export PDF</string>
     <string name="export_page_size">Page size</string>
     <string name="export_orientation">Orientation</string>
+    <string name="export_compression">Compression</string>
+    <string name="export_compression_full">Penuh</string>
+    <string name="export_compression_compress">Mampat</string>
+    <string name="export_compression_grayscale">Mampat (Kelabu)</string>
     <string name="export_generating">Generating PDF…</string>
     <string name="export_save">Save to Documents</string>
     <string name="export_share">Share</string>
