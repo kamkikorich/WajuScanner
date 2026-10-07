@@ -30,6 +30,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.FlashOff
+import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
@@ -92,6 +94,9 @@ fun QrScannerScreen(
         }
     }
 
+    val cameraHolder = remember { CameraHolder() }
+    var flashOn by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -101,10 +106,20 @@ fun QrScannerScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
                     }
                 },
+                actions = {
+                    IconButton(onClick = {
+                        cameraHolder.camera?.cameraControl?.enableTorch(!flashOn)
+                        flashOn = !flashOn
+                    }) {
+                        Icon(
+                            imageVector = if (flashOn) Icons.Filled.FlashOn else Icons.Filled.FlashOff,
+                            contentDescription = if (flashOn) "Matikan lampu" else "Hidupkan lampu",
+                        )
+                    }
+                },
             )
         },
     ) { innerPadding ->
-        val cameraHolder = remember { CameraHolder() }
         Box(
             modifier = Modifier
                 .fillMaxSize()

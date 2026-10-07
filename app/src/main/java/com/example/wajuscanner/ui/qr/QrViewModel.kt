@@ -48,6 +48,14 @@ class QrViewModel @Inject constructor() : ViewModel() {
                 Barcode.FORMAT_DATA_MATRIX,
                 Barcode.FORMAT_PDF417,
                 Barcode.FORMAT_CODE_128,
+                Barcode.FORMAT_CODE_39,
+                Barcode.FORMAT_CODE_93,
+                Barcode.FORMAT_CODABAR,
+                Barcode.FORMAT_EAN_13,
+                Barcode.FORMAT_EAN_8,
+                Barcode.FORMAT_ITF,
+                Barcode.FORMAT_UPC_A,
+                Barcode.FORMAT_UPC_E,
             )
             .enableAllPotentialBarcodes()
             .setZoomSuggestionOptions(
