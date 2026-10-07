@@ -18,11 +18,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -42,11 +45,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -133,7 +139,7 @@ fun QrScannerScreen(
                         viewModel = viewModel,
                         holder = cameraHolder,
                     )
-                    ScannerOverlay()
+                    ScannerOverlay(viewModel = viewModel)
                     ResultListener(viewModel = viewModel)
                     ZoomIndicator(viewModel = viewModel)
                 }
@@ -257,22 +263,97 @@ private fun CameraViewfinder(viewModel: QrViewModel, holder: CameraHolder) {
 }
 
 @Composable
-private fun ScannerOverlay() {
-    Box(
+private fun ScannerOverlay(viewModel: QrViewModel) {
+    val boxes by viewModel.detectedBoxes.collectAsStateWithLifecycle()
+    val imageInfo by viewModel.imageInfo.collectAsStateWithLifecycle()
+
+    BoxWithConstraints(
         modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center,
+        contentAlignment = Alignment.TopStart,
     ) {
-        Box(
-            modifier = Modifier
-                .size(240.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .border(
-                    width = 3.dp,
-                    color = Color.White.copy(alpha = 0.85f),
-                    shape = RoundedCornerShape(16.dp),
-                ),
+        boxes.forEach { imageRect ->
+            val projected = projectBoundingBox(
+                imageRect = imageRect,
+                imageInfo = imageInfo,
+                previewWidthPx = constraints.maxWidth,
+                previewHeightPx = constraints.maxHeight,
+            )
+            Box(
+                modifier = Modifier
+                    .offset {
+                        androidx.compose.ui.unit.IntOffset(
+                            projected.left.toInt(),
+                            projected.top.toInt(),
+                        )
+                    }
+                    .size(
+                        width = with(androidx.compose.ui.platform.LocalDensity.current) {
+                            projected.width().toDp()
+                        },
+                        height = with(androidx.compose.ui.platform.LocalDensity.current) {
+                            projected.height().toDp()
+                        },
+                    )
+                    .border(
+                        width = 3.dp,
+                        color = Color(0xFF34C759),
+                        shape = RoundedCornerShape(12.dp),
+                    ),
+            )
+        }
+    }
+}
+
+/**
+ * Project an ML Kit bounding box (given in image-space coordinates) into
+ * PreviewView pixel coordinates. With PreviewView.ScaleType.FILL_CENTER the
+ * preview scales uniformly to fill the viewport and crops the longer axis;
+ * [rotationDegrees] is added because the sensor is mounted landscape and the
+ * portrait frame is the rotated image-space.
+ */
+private fun projectBoundingBox(
+    imageRect: android.graphics.Rect,
+    imageInfo: ImageInfo,
+    previewWidthPx: Int,
+    previewHeightPx: Int,
+): android.graphics.Rect {
+    val imageW = imageInfo.width.toFloat()
+    val imageH = imageInfo.height.toFloat()
+
+    // Effective buffer dims after applying sensor rotation. CameraX delivers
+    // the buffer in its native orientation; rotationDegrees rotates it for
+    // display. ML Kit bounding boxes use the rotated (display) coordinates.
+    val (dispW, dispH) = if (imageInfo.rotationDegrees % 180 == 0) {
+        imageW to imageH
+    } else {
+        imageH to imageW
+    }
+
+    // FILL_CENTER: scale uniformly to fill, center the longer axis.
+    val scale = maxOf(previewWidthPx / dispW, previewHeightPx / dispH)
+    val renderedW = dispW * scale
+    val renderedH = dispH * scale
+    val offsetX = (previewWidthPx - renderedW) / 2f
+    val offsetY = (previewHeightPx - renderedH) / 2f
+
+    val rotatedRect = if (imageInfo.rotationDegrees % 180 == 0) {
+        imageRect
+    } else {
+        // Swap x/y when rotated 90 or 270 degrees.
+        android.graphics.Rect(
+            imageRect.top,
+            imageInfo.width - imageRect.bottom,
+            imageRect.bottom,
+            imageInfo.width - imageRect.top,
         )
     }
+
+    return android.graphics.Rect(
+        (offsetX + rotatedRect.left * scale).toInt(),
+        (offsetY + rotatedRect.top * scale).toInt(),
+        (offsetX + rotatedRect.right * scale).toInt(),
+        (offsetY + rotatedRect.bottom * scale).toInt(),
+    )
 }
 
 @Composable
@@ -286,16 +367,29 @@ private fun ResultListener(viewModel: QrViewModel) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FoundDialog(
     value: String,
     onScanAgain: () -> Unit,
 ) {
     val context = LocalContext.current
-    AlertDialog(
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
         onDismissRequest = onScanAgain,
-        title = { Text("QR Dijumpai") },
-        text = {
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = "QR Dijumpai",
+                style = MaterialTheme.typography.titleLarge,
+            )
             if (isLikelyUrl(value)) {
                 UrlLinkText(value)
             } else {
@@ -305,26 +399,35 @@ private fun FoundDialog(
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
-        },
-        confirmButton = {
-            Button(onClick = { copyToClipboard(context, value) }) {
-                Icon(Icons.Filled.ContentCopy, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Salin")
-            }
-        },
-        dismissButton = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(onClick = { shareText(context, value) }) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                OutlinedButton(
+                    onClick = { shareText(context, value) },
+                    modifier = Modifier.weight(1f),
+                ) {
                     Icon(Icons.Filled.Share, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text("Kongsi")
                 }
-                Spacer(Modifier.width(8.dp))
-                TextButton(onClick = onScanAgain) { Text("Imbas Lagi") }
+                Button(
+                    onClick = { copyToClipboard(context, value) },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(Icons.Filled.ContentCopy, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Salin")
+                }
             }
-        },
-    )
+            TextButton(
+                onClick = onScanAgain,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Imbas Lagi")
+            }
+        }
+    }
 }
 
 @Composable

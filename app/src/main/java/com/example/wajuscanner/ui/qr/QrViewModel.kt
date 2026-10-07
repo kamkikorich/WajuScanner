@@ -1,5 +1,6 @@
 package com.example.wajuscanner.ui.qr
 
+import android.graphics.Rect
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
@@ -22,13 +23,31 @@ import javax.inject.Inject
  * The scanner uses ML Kit Barcode Scanning (bundled) restricted to formats
  * useful for document workflows: QR, Aztec, Data Matrix, PDF417, Code 128.
  * Auto-zoom is enabled so the library can request a closer view when the
- * detected barcode is too small to decode reliably.
+ * detected barcode is too small to decode reliably. The currently-detected
+ * bounding boxes are surfaced through [detectedBoxes] so the overlay can
+ * draw a real-time highlight around the code(s) in the frame.
  */
 @HiltViewModel
 class QrViewModel @Inject constructor() : ViewModel() {
 
     private val _uiState = MutableStateFlow<QrUiState>(QrUiState.Scanning)
     val uiState: StateFlow<QrUiState> = _uiState
+
+    /**
+     * Bounding boxes (image-space, NOT screen-space) of every barcode the
+     * library is currently tracking. Emitted on the analyzer thread, so the
+     * Composable that consumes it is responsible for projecting to screen.
+     * Empty list means no detection in the latest frame.
+     */
+    private val _detectedBoxes = MutableStateFlow<List<Rect>>(emptyList())
+    val detectedBoxes: StateFlow<List<Rect>> = _detectedBoxes
+
+    /**
+     * Source image dimensions + rotation in degrees, used to project the
+     * image-space [Rect]s in [detectedBoxes] into screen space.
+     */
+    private val _imageInfo = MutableStateFlow(ImageInfo(0, 0, 0))
+    val imageInfo: StateFlow<ImageInfo> = _imageInfo
 
     private val zoomCallback = ZoomSuggestionOptions.ZoomCallback { zoomRatio ->
         // Docs: "this callback will always be called on the main thread."
@@ -77,13 +96,23 @@ class QrViewModel @Inject constructor() : ViewModel() {
             return@Analyzer
         }
 
+        val info = imageProxy.imageInfo
+        _imageInfo.value = ImageInfo(
+            width = mediaImage.width,
+            height = mediaImage.height,
+            rotationDegrees = info.rotationDegrees,
+        )
+
         val inputImage = InputImage.fromMediaImage(
             mediaImage,
-            imageProxy.imageInfo.rotationDegrees,
+            info.rotationDegrees,
         )
 
         scanner.process(inputImage)
             .addOnSuccessListener { barcodes ->
+                val boxes = barcodes.mapNotNull { it.boundingBox }
+                _detectedBoxes.value = boxes
+
                 val first = barcodes.firstOrNull { !it.rawValue.isNullOrBlank() }
                 if (first != null) {
                     _uiState.update { QrUiState.Found(first.rawValue!!) }
@@ -119,3 +148,10 @@ sealed interface QrUiState {
     data class Found(val value: String) : QrUiState
     data class ZoomSuggested(val ratio: Float) : QrUiState
 }
+
+/** Source-image dimensions plus rotation, used for bounding-box projection. */
+data class ImageInfo(
+    val width: Int,
+    val height: Int,
+    val rotationDegrees: Int,
+)
