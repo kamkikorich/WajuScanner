@@ -6,6 +6,7 @@ import androidx.camera.core.ImageProxy
 import androidx.lifecycle.ViewModel
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.barcode.ZoomSuggestionOptions
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -20,12 +21,24 @@ import javax.inject.Inject
  *
  * The scanner uses ML Kit Barcode Scanning (bundled) restricted to formats
  * useful for document workflows: QR, Aztec, Data Matrix, PDF417, Code 128.
+ * Auto-zoom is enabled so the library can request a closer view when the
+ * detected barcode is too small to decode reliably.
  */
 @HiltViewModel
 class QrViewModel @Inject constructor() : ViewModel() {
 
     private val _uiState = MutableStateFlow<QrUiState>(QrUiState.Scanning)
     val uiState: StateFlow<QrUiState> = _uiState
+
+    private val zoomCallback = ZoomSuggestionOptions.ZoomCallback { zoomRatio ->
+        // Docs: "this callback will always be called on the main thread."
+        // The UI hands the new ratio back via [onZoomSuggestion] so we only
+        // surface it here; the actual camera control lives in the Composable.
+        _uiState.value = QrUiState.ZoomSuggested(
+                ratio = zoomRatio,
+            )
+        true
+    }
 
     private val scanner = BarcodeScanning.getClient(
         BarcodeScannerOptions.Builder()
@@ -35,6 +48,11 @@ class QrViewModel @Inject constructor() : ViewModel() {
                 Barcode.FORMAT_DATA_MATRIX,
                 Barcode.FORMAT_PDF417,
                 Barcode.FORMAT_CODE_128,
+            )
+            .enableAllPotentialBarcodes()
+            .setZoomSuggestionOptions(
+                ZoomSuggestionOptions.Builder(zoomCallback)
+                    .build()
             )
             .build()
     )
@@ -75,6 +93,13 @@ class QrViewModel @Inject constructor() : ViewModel() {
         _uiState.value = QrUiState.Scanning
     }
 
+    /** Called when the UI finishes applying the zoom suggestion. */
+    fun consumeZoomSuggestion() {
+        if (_uiState.value is QrUiState.ZoomSuggested) {
+            _uiState.value = QrUiState.Scanning
+        }
+    }
+
     override fun onCleared() {
         scanner.close()
         super.onCleared()
@@ -84,4 +109,5 @@ class QrViewModel @Inject constructor() : ViewModel() {
 sealed interface QrUiState {
     data object Scanning : QrUiState
     data class Found(val value: String) : QrUiState
+    data class ZoomSuggested(val ratio: Float) : QrUiState
 }

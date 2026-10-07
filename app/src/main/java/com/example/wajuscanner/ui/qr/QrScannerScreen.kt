@@ -8,11 +8,13 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,12 +30,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -58,7 +63,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -99,15 +104,24 @@ fun QrScannerScreen(
             )
         },
     ) { innerPadding ->
+        val cameraHolder = remember { CameraHolder() }
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
             if (hasPermission) {
-                CameraViewfinder(viewModel = viewModel)
-                ScannerOverlay()
-                ResultListener(viewModel = viewModel)
+                androidx.compose.runtime.CompositionLocalProvider(
+                    LocalCameraController provides cameraHolder.camera,
+                ) {
+                    CameraViewfinder(
+                        viewModel = viewModel,
+                        holder = cameraHolder,
+                    )
+                    ScannerOverlay()
+                    ResultListener(viewModel = viewModel)
+                    ZoomIndicator(viewModel = viewModel)
+                }
             } else {
                 PermissionRationale(
                     onRequest = { permissionLauncher.launch(Manifest.permission.CAMERA) },
@@ -117,9 +131,76 @@ fun QrScannerScreen(
     }
 }
 
+private class CameraHolder(var camera: Camera? = null)
+
+/**
+ * Floats the current zoom level above the preview and reacts to ML Kit zoom
+ * suggestions. The camera control reference is captured in [CameraViewfinder]
+ * via [LocalCameraController] so this composable can drive [setZoomRatio]
+ * without rebuilding the preview.
+ */
+@Composable
+private fun androidx.compose.foundation.layout.BoxScope.ZoomIndicator(viewModel: QrViewModel) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val camera = LocalCameraController.current
+    var currentRatio by remember { mutableStateOf(1f) }
+
+    LaunchedEffect(state) {
+        val suggestion = state as? QrUiState.ZoomSuggested ?: return@LaunchedEffect
+        val clamped = suggestion.ratio.coerceIn(1f, MAX_ZOOM)
+        camera?.cameraControl?.setZoomRatio(clamped)
+        currentRatio = clamped
+        viewModel.consumeZoomSuggestion()
+    }
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .padding(24.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(Color.Black.copy(alpha = 0.55f))
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+    ) {
+        Text(
+            text = "%.1fx".format(currentRatio),
+            color = Color.White,
+            style = MaterialTheme.typography.labelLarge,
+        )
+        if (currentRatio > 1.01f) {
+            FilledTonalIconButton(
+                onClick = {
+                    camera?.cameraControl?.setZoomRatio(1f)
+                    currentRatio = 1f
+                },
+                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                    containerColor = Color.White.copy(alpha = 0.15f),
+                    contentColor = Color.White,
+                ),
+                modifier = Modifier.size(32.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Refresh,
+                    contentDescription = "Set semula zum",
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+    }
+}
+
+private const val MAX_ZOOM = 4f
+
+/**
+ * Holder passed from [CameraViewfinder] to its overlay so the overlay can
+ * invoke camera control without keeping a second camera reference.
+ */
+private val LocalCameraController = androidx.compose.runtime.compositionLocalOf<Camera?> { null }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CameraViewfinder(viewModel: QrViewModel) {
+private fun CameraViewfinder(viewModel: QrViewModel, holder: CameraHolder) {
     val context = LocalContext.current
     val lifecycleOwner: LifecycleOwner = LocalLifecycleOwner.current
     val analyzer = remember(viewModel) { viewModel.analyzer() }
@@ -144,7 +225,7 @@ private fun CameraViewfinder(viewModel: QrViewModel) {
 
                 try {
                     provider.unbindAll()
-                    provider.bindToLifecycle(
+                    holder.camera = provider.bindToLifecycle(
                         lifecycleOwner,
                         CameraSelector.DEFAULT_BACK_CAMERA,
                         preview,
