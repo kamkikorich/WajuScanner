@@ -191,17 +191,16 @@ object ImageUtils {
     }
 
     /**
-     * Draws a small semi-transparent label badge in the top-left corner of
-     * [source] so the front/back sides of an ID card stay identifiable once
-     * combined into a single page. The badge is drawn directly onto a copy of
-     * the source so the caller's bitmap stays untouched. Returns a NEW bitmap;
-     * callers own its lifecycle.
+     * Menggantung [label] sebagai jalur keterangan di BAWAH imej sisi kad,
+     * bukan timbul di atas kad. Ini menjamin apa-apa teks ID (lambang JPN,
+     * nombor, tulisan kecil) tidak dilindungi oleh latar hitam label.
+     * Kembali bitmap BARU; pemanggil punya kitaran hidupnya.
      */
-    fun watermarkLabel(source: Bitmap, label: String): Bitmap {
-        val padding = (source.width * 0.018f).toInt().coerceAtLeast(8)
-        val textSize = (source.width * 0.04f).coerceAtLeast(24f)
-        val badgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.argb(170, 0, 0, 0)
+    fun captionStrip(source: Bitmap, label: String): Bitmap {
+        val stripHeight = (source.height * 0.06f).toInt().coerceAtLeast(28)
+        val textSize = (stripHeight * 0.52f).coerceAtLeast(16f)
+        val stripPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(255, 30, 30, 30)
             style = Paint.Style.FILL
         }
         val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -212,26 +211,22 @@ object ImageUtils {
 
         val bounds = Rect()
         textPaint.getTextBounds(label, 0, label.length, bounds)
-        val badgeWidth = bounds.width() + padding * 2
-        val badgeHeight = (bounds.height() + padding * 1.5f).toInt()
 
-        val out = Bitmap.createBitmap(source.width, source.height, Bitmap.Config.ARGB_8888)
+        val out =
+            Bitmap.createBitmap(source.width, source.height + stripHeight, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(out)
         canvas.drawBitmap(source, 0f, 0f, null)
-        val badgeTop = padding
-        canvas.drawRoundRect(
-            padding.toFloat(),
-            badgeTop.toFloat(),
-            (padding + badgeWidth).toFloat(),
-            (badgeTop + badgeHeight).toFloat(),
-            padding.toFloat(),
-            padding.toFloat(),
-            badgePaint,
+        canvas.drawRect(
+            0f,
+            source.height.toFloat(),
+            source.width.toFloat(),
+            out.height.toFloat(),
+            stripPaint,
         )
         canvas.drawText(
             label,
-            (padding + padding).toFloat(),
-            (badgeTop + badgeHeight - padding * 0.6f).toFloat(),
+            (source.width - bounds.width()) / 2f,
+            source.height + (stripHeight + bounds.height()) / 2f,
             textPaint,
         )
         return out

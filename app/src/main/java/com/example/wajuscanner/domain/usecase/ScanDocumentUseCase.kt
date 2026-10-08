@@ -3,6 +3,7 @@ package com.example.wajuscanner.domain.usecase
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
+import com.example.wajuscanner.R
 import com.example.wajuscanner.core.common.Constants
 import com.example.wajuscanner.core.util.FileUtils
 import com.example.wajuscanner.core.util.ImageUtils
@@ -108,9 +109,15 @@ class ScanDocumentUseCase @Inject constructor(
             val back = ImageUtils.loadBitmapFromUri(context, Uri.parse(pageUris[1]))
                 ?: return@withContext Result.failure(IllegalStateException("Failed to load back side"))
 
-            val frontLabeled = ImageUtils.watermarkLabel(front, "FRONT")
+            val frontLabeled = ImageUtils.captionStrip(
+                front,
+                context.getString(R.string.id_side_front)
+            )
             front.recycle()
-            val backLabeled = ImageUtils.watermarkLabel(back, "BACK")
+            val backLabeled = ImageUtils.captionStrip(
+                back,
+                context.getString(R.string.id_side_back)
+            )
             back.recycle()
 
             val combined = when (layout) {
