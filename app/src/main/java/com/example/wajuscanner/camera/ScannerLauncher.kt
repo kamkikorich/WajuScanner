@@ -42,7 +42,10 @@ class ScannerLauncher @Inject constructor(
         return availability.isGooglePlayServicesAvailable(context) == ConnectionResult.SUCCESS
     }
 
-    fun getStartScanIntent(activity: Activity, idCardMode: Boolean = false): Task<IntentSender> {
+    fun getStartScanIntent(activity: Activity, idCardMode: Boolean = false, pageLimit: Int? = null): Task<IntentSender> {
+        // pageLimit eksplisit mengatasi default (null = ikut mod):
+        // biasa = unlimited (jangan panggil setPageLimit lihat AGENTS),
+        // ID-card pertama = 2, retake satu slot = 1.
         val effectiveOptions = if (idCardMode) {
             // ID-card mode: had 2 muka (depan + belakang). setPageLimit min 1.
             val idOptions = GmsDocumentScannerOptions.Builder()
@@ -52,7 +55,7 @@ class ScannerLauncher @Inject constructor(
                     GmsDocumentScannerOptions.RESULT_FORMAT_PDF
                 )
                 .setGalleryImportAllowed(true)
-                .setPageLimit(2)
+                .apply { setPageLimit(pageLimit ?: 2) }
                 .build()
             GmsDocumentScanning.getClient(idOptions)
         } else {

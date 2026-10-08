@@ -26,6 +26,20 @@
     <string name="scanner_id_layout_vertical">Atas / Bawah</string>
     <string name="scanner_id_layout_horizontal">Kiri / Kanan</string>
     <string name="scanner_id_naming_hint">Nama dokumen akan diisi automatik dari teks kad jika dapat dibaca.</string>
+    <string name="scanner_id_review_title">Semak Kedua-dua Sisi</string>
+    <string name="id_side_front">HADAPAN</string>
+    <string name="id_side_back">BELAKANG</string>
+    <string name="scanner_id_review_swap">Tukar</string>
+    <string name="scanner_id_review_save">Simpan</string>
+    <string name="scanner_id_review_retake_front">Imbas semula muka Depan</string>
+    <string name="scanner_id_review_retake_back">Imbas semula belakang</string>
+    <string name="scanner_id_review_cancel">Batal</string>
+    <string name="scanner_id_review_loading_thumbs">Memuatkan semakan sisi…</string>
+    <string name="scanner_unavailable">Google Play Services document scanner tidak wujud pada peranti ini.</string>
+    <string name="scanner_start_failed">Gagal membuka scanner.</string>
+    <string name="scanner_no_pages">Tiada halaman diimbas.</string>
+    <string name="scanner_id_need_two_sides">Mod Kad ID perlukan dua sisi — imbas hadapan dan belakang.</string>
+    <string name="scanner_save_failed">Gagal menyimpan dokumen.</string>
     <string name="cd_back">Go back</string>
 
     <!-- Editor screen -->

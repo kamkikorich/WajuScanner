@@ -11,11 +11,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -23,6 +27,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -45,6 +50,20 @@ import com.example.wajuscanner.R
 import com.example.wajuscanner.camera.ScannerLauncher
 import com.example.wajuscanner.camera.ScannerResult
 import com.example.wajuscanner.domain.usecase.IdCardLayout
+import android.net.Uri
+import androidx.compose.foundation.Image
+import androidx.compose.material3.Card
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import com.example.wajuscanner.core.util.ImageUtils
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+/** Slot index draf kad ID: muka = 0, belakang = 1. */
+private const val SLOT_FRONT = 0
+private const val SLOT_BACK = 1
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,6 +88,14 @@ fun ScannerScreen(
     fun launchScan() {
         if (activity != null) {
             viewModel.startScan(activity) { intentSender ->
+                scannerLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
+            }
+        }
+    }
+
+    fun launchRetake(slot: Int) {
+        if (activity != null) {
+            viewModel.retakeSlot(activity, slot) { intentSender ->
                 scannerLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
             }
         }
@@ -131,6 +158,20 @@ fun ScannerScreen(
                             style = MaterialTheme.typography.bodyLarge
                         )
                     }
+                }
+                is ScannerUiState.IdCardReview -> {
+                    IdCardReviewContent(
+                        front = currentState.front,
+                        back = currentState.back,
+                        onSwap = { viewModel.swapSides() },
+                        onRetakeFront = { launchRetake(SLOT_FRONT) },
+                        onRetakeBack = { launchRetake(SLOT_BACK) },
+                        onSave = { viewModel.saveIdCardDocument() },
+                        onCancel = {
+                            // Cancel review: buang draf, kembali ke skrin idle.
+                            viewModel.consumeEvent()
+                        }
+                    )
                 }
                 is ScannerUiState.Error -> {
                     ErrorContent(
@@ -221,6 +262,114 @@ private fun ScannerIdleContent(
         }
         Button(onClick = onScanClick) {
             Text(stringResource(R.string.scanner_button_start))
+        }
+    }
+}
+
+/**
+ * Skrin semakan 2-slot: dua sisi kad ditayang berlabel, user boleh tukar,
+ * imbas semula satu sisi, simpan, atau batal. Tiada apa-apa disimpan lagi.
+ */
+@Composable
+private fun IdCardReviewContent(
+    front: String,
+    back: String,
+    onSwap: () -> Unit,
+    onRetakeFront: () -> Unit,
+    onRetakeBack: () -> Unit,
+    onSave: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    val context = LocalContext.current
+    val frontBitmap by produceState<android.graphics.Bitmap?>(initialValue = null, key1 = front) {
+        value = withContext(Dispatchers.IO) {
+            ImageUtils.loadBitmapFromUri(context, Uri.parse(front), 1024)
+        }
+    }
+    val backBitmap by produceState<android.graphics.Bitmap?>(initialValue = null, key1 = back) {
+        value = withContext(Dispatchers.IO) {
+            ImageUtils.loadBitmapFromUri(context, Uri.parse(back), 1024)
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = stringResource(R.string.scanner_id_review_title),
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+        ReviewSideCard(
+            slot = SLOT_FRONT,
+            bitmap = frontBitmap,
+            onRetake = onRetakeFront
+        )
+        OutlinedButton(onClick = onSwap) {
+            Icon(Icons.Default.SwapVert, contentDescription = null)
+            Spacer(Modifier.width(6.dp))
+            Text(stringResource(R.string.scanner_id_review_swap))
+        }
+        ReviewSideCard(
+            slot = SLOT_BACK,
+            bitmap = backBitmap,
+            onRetake = onRetakeBack
+        )
+        Spacer(Modifier.height(16.dp))
+        Row {
+            TextButton(onClick = onCancel) {
+                Text(stringResource(R.string.scanner_id_review_cancel))
+            }
+            Spacer(Modifier.width(8.dp))
+            Button(onClick = onSave) {
+                Text(stringResource(R.string.scanner_id_review_save))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReviewSideCard(
+    slot: Int,
+    bitmap: android.graphics.Bitmap?,
+    onRetake: () -> Unit,
+) {
+    val sideLabel = stringResource(
+        if (slot == SLOT_FRONT) R.string.id_side_front else R.string.id_side_back
+    )
+    val retakeLabel = stringResource(
+        if (slot == SLOT_FRONT) {
+            R.string.scanner_id_review_retake_front
+        } else {
+            R.string.scanner_id_review_retake_back
+        }
+    )
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Card(modifier = Modifier.fillMaxWidth(0.9f)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1.59f), // kad kredit ≈ 85.6 × 54 mm
+                contentAlignment = Alignment.Center
+            ) {
+                val imageBitmap = bitmap?.asImageBitmap()
+                if (imageBitmap != null) {
+                    Image(
+                        bitmap = imageBitmap,
+                        contentDescription = sideLabel,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Text(text = stringResource(R.string.scanner_id_review_loading_thumbs))
+                }
+            }
+        }
+        TextButton(onClick = onRetake) {
+            Text(retakeLabel)
         }
     }
 }
