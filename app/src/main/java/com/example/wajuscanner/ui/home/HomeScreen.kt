@@ -50,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -61,6 +62,8 @@ import com.example.wajuscanner.R
 import com.example.wajuscanner.domain.model.Document
 import com.example.wajuscanner.domain.model.Page
 import com.example.wajuscanner.domain.repository.DocumentRepository
+import com.example.wajuscanner.ui.theme.InkOnSurface
+import com.example.wajuscanner.ui.theme.InkOnSurfaceVariant
 import com.example.wajuscanner.ui.theme.WajuScannerTheme
 import kotlinx.coroutines.flow.flowOf
 import java.util.Date
@@ -131,6 +134,7 @@ fun HomeScreen(
                 onQrScanClick = onQrScanClick,
                 onIdPhotoClick = onIdPhotoClick,
                 onResumeDraft = { draft?.id?.let(onResumeDraft) },
+                onSettingsClick = onSettingsClick,
             )
             Spacer(modifier = Modifier.height(12.dp))
             when (val currentState = state) {
@@ -513,6 +517,7 @@ private fun QuickActionGrid(
     onQrScanClick: () -> Unit,
     onIdPhotoClick: () -> Unit,
     onResumeDraft: () -> Unit,
+    onSettingsClick: () -> Unit,
 ) {
     Column(
         modifier = Modifier.padding(horizontal = 16.dp),
@@ -521,7 +526,7 @@ private fun QuickActionGrid(
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             ActionTile(
                 label = "Imbas Dokumen",
-                hint = "Kamera → PDF",
+                hint = "Kamera menjadi PDF",
                 icon = Icons.Default.DocumentScanner,
                 tint = MaterialTheme.colorScheme.primaryContainer,
                 onClick = onScanClick,
@@ -529,7 +534,7 @@ private fun QuickActionGrid(
             )
             ActionTile(
                 label = "Imbas Kod QR",
-                hint = "Hadapan & galeri",
+                hint = "Kamera dan galeri",
                 icon = Icons.Default.QrCodeScanner,
                 tint = MaterialTheme.colorScheme.primaryContainer,
                 onClick = onQrScanClick,
@@ -539,7 +544,7 @@ private fun QuickActionGrid(
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             ActionTile(
                 label = "Foto Rasmi",
-                hint = "Pasport 35×50",
+                hint = "Pasport 35×50 mm",
                 icon = Icons.Filled.Portrait,
                 tint = MaterialTheme.colorScheme.primaryContainer,
                 onClick = onIdPhotoClick,
@@ -548,7 +553,7 @@ private fun QuickActionGrid(
             if (hasDraft) {
                 ActionTile(
                     label = "Draf Tertunggak",
-                    hint = "Sambung imbasan",
+                    hint = "Sambung imbasan lepas",
                     icon = Icons.Default.History,
                     tint = MaterialTheme.colorScheme.secondaryContainer,
                     onClick = onResumeDraft,
@@ -556,11 +561,11 @@ private fun QuickActionGrid(
                 )
             } else {
                 ActionTile(
-                    label = "Cari Dokumen",
-                    hint = "Nama & teks OCR",
-                    icon = Icons.Default.Search,
+                    label = "Tetapan",
+                    hint = "Tema, fail dan lain-lain",
+                    icon = Icons.Default.Menu,
                     tint = MaterialTheme.colorScheme.primaryContainer,
-                    onClick = {},
+                    onClick = onSettingsClick,
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -580,27 +585,37 @@ private fun ActionTile(
 ) {
     Card(
         onClick = onClick,
-        modifier = modifier,
+        modifier = Modifier
+            .height(136.dp)
+            .then(modifier),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         shape = MaterialTheme.shapes.extraLarge,
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Box(
                 modifier = Modifier
-                    .size(38.dp)
+                    .size(42.dp)
                     .background(color = tint, shape = MaterialTheme.shapes.medium),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             }
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(text = label, style = MaterialTheme.typography.titleSmall)
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleMedium,
+                color = InkOnSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = hint,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelMedium,
+                color = InkOnSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }

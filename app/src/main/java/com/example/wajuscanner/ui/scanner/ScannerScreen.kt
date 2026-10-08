@@ -16,11 +16,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -198,69 +203,131 @@ private fun ScannerIdleContent(
     onScanClick: () -> Unit
 ) {
     Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(
-            text = stringResource(R.string.scanner_ready_title),
-            style = MaterialTheme.typography.headlineSmall,
-            textAlign = TextAlign.Center
-        )
-        Text(
-            text = stringResource(R.string.scanner_ready_subtitle),
-            style = MaterialTheme.typography.bodyMedium,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 32.dp)
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(horizontal = 32.dp)
+        // Panggung imbasan — kad besar bersempadan tong, gaya mockup Stitch.
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.extraLarge,
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            ),
+            border = androidx.compose.foundation.BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.outline,
+            ),
         ) {
-            Text(
-                text = stringResource(R.string.scanner_id_mode_label),
-                modifier = Modifier.weight(1f)
-            )
-            Switch(checked = idCardMode, onCheckedChange = { onToggleIdCardMode() })
-        }
-        if (idCardMode) {
-            Text(
-                text = stringResource(R.string.scanner_id_mode_hint),
-                style = MaterialTheme.typography.bodySmall,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 32.dp)
-            )
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(horizontal = 32.dp)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 28.dp, horizontal = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                IdCardLayout.entries.forEach { layout ->
-                    FilterChip(
-                        selected = idCardLayout == layout,
-                        onClick = { onLayoutSelected(layout) },
-                        label = {
-                            Text(
-                                text = stringResource(
-                                    when (layout) {
-                                        IdCardLayout.VERTICAL -> R.string.scanner_id_layout_vertical
-                                        IdCardLayout.HORIZONTAL -> R.string.scanner_id_layout_horizontal
-                                    }
-                                )
+                androidx.compose.material3.Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.surface,
+                ) {
+                    Text(
+                        text = "PENGESANAN AUTO AKTIF",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Default.DocumentScanner,
+                    contentDescription = null,
+                    modifier = Modifier.size(56.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = stringResource(R.string.scanner_ready_subtitle),
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        // Mod Kad ID — kad permukaan tersendiri.
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.extraLarge,
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+            ),
+            border = androidx.compose.foundation.BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.outline,
+            ),
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.scanner_id_mode_label),
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Switch(checked = idCardMode, onCheckedChange = { onToggleIdCardMode() })
+                }
+                if (idCardMode) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.scanner_id_mode_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Susunan Halaman",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+                    ) {
+                        IdCardLayout.entries.forEach { layout ->
+                            FilterChip(
+                                selected = idCardLayout == layout,
+                                onClick = { onLayoutSelected(layout) },
+                                label = {
+                                    Text(
+                                        text = stringResource(
+                                            when (layout) {
+                                                IdCardLayout.VERTICAL -> R.string.scanner_id_layout_vertical
+                                                IdCardLayout.HORIZONTAL -> R.string.scanner_id_layout_horizontal
+                                            }
+                                        )
+                                    )
+                                }
                             )
                         }
+                    }
+                    Text(
+                        text = stringResource(R.string.scanner_id_naming_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
-            Text(
-                text = stringResource(R.string.scanner_id_naming_hint),
-                style = MaterialTheme.typography.bodySmall,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 32.dp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
-        Button(onClick = onScanClick) {
+
+        Spacer(modifier = Modifier.weight(1f))
+        Button(onClick = onScanClick, modifier = Modifier.fillMaxWidth()) {
+            Icon(
+                imageVector = Icons.Default.DocumentScanner,
+                contentDescription = null,
+            )
+            Spacer(modifier = Modifier.width(8.dp))
             Text(stringResource(R.string.scanner_button_start))
         }
     }

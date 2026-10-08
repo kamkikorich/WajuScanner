@@ -83,6 +83,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.wajuscanner.ui.theme.InkSurfaceDark
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -264,7 +265,10 @@ private fun CameraViewfinder(viewModel: QrViewModel, holder: CameraHolder) {
     val analyzer = remember(viewModel) { viewModel.analyzer() }
 
     AndroidView(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(MaterialTheme.shapes.extraLarge)
+            .background(InkSurfaceDark),
         factory = { ctx ->
             val previewView = PreviewView(ctx).apply {
                 scaleType = PreviewView.ScaleType.FILL_CENTER

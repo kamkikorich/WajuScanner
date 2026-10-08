@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -23,6 +24,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -254,13 +256,13 @@ private fun ExportOptionsDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onSave, enabled = !isExporting) {
-                Text(stringResource(R.string.export_save))
+            Button(onClick = onShare, enabled = !isExporting) {
+                Text(stringResource(R.string.export_share))
             }
         },
         dismissButton = {
-            TextButton(onClick = onShare, enabled = !isExporting) {
-                Text(stringResource(R.string.export_share))
+            OutlinedButton(onClick = onSave, enabled = !isExporting) {
+                Text(stringResource(R.string.export_save))
             }
         }
     )
