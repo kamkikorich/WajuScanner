@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Portrait
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
@@ -67,6 +68,7 @@ fun HomeScreen(
     onDocumentClick: (Long) -> Unit,
     onSettingsClick: () -> Unit,
     onQrScanClick: () -> Unit,
+    onIdPhotoClick: () -> Unit,
     onResumeDraft: (Long) -> Unit,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -80,6 +82,12 @@ fun HomeScreen(
                         Icon(
                             imageVector = Icons.Default.QrCodeScanner,
                             contentDescription = "Imbas QR",
+                        )
+                    }
+                    IconButton(onClick = onIdPhotoClick) {
+                        Icon(
+                            imageVector = Icons.Filled.Portrait,
+                            contentDescription = "Foto Pasport",
                         )
                     }
                     IconButton(onClick = onSettingsClick) {
@@ -392,6 +400,7 @@ private fun HomeScreenEmptyPreview() {
             onDocumentClick = {},
             onSettingsClick = {},
             onQrScanClick = {},
+            onIdPhotoClick = {},
             onResumeDraft = {},
         )
     }

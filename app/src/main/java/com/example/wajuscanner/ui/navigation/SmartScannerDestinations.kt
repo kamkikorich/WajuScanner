@@ -13,6 +13,9 @@ sealed interface SmartScannerDestinations {
     data object QrScanner : SmartScannerDestinations
 
     @Serializable
+    data object IdPhoto : SmartScannerDestinations
+
+    @Serializable
     data class Editor(val pageId: Long = -1L) : SmartScannerDestinations
 
     @Serializable

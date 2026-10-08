@@ -11,6 +11,7 @@ import com.example.wajuscanner.ui.editor.EditorScreen
 import com.example.wajuscanner.ui.home.HomeScreen
 import com.example.wajuscanner.ui.home.HomeViewModel
 import com.example.wajuscanner.ui.ocr.OcrResultScreen
+import com.example.wajuscanner.ui.idphoto.PassportPhotoScreen
 import com.example.wajuscanner.ui.qr.QrScannerScreen
 import com.example.wajuscanner.ui.resume.ResumeScanScreen
 import com.example.wajuscanner.ui.scanner.ScannerScreen
@@ -57,6 +58,9 @@ fun WajuScannerNavGraph(
                 onQrScanClick = {
                     navController.navigate(SmartScannerDestinations.QrScanner)
                 },
+                onIdPhotoClick = {
+                    navController.navigate(SmartScannerDestinations.IdPhoto)
+                },
                 onResumeDraft = { documentId ->
                     navController.navigate(SmartScannerDestinations.ResumeDraft(documentId))
                 },
@@ -74,6 +78,12 @@ fun WajuScannerNavGraph(
 
         composable<SmartScannerDestinations.QrScanner> {
             QrScannerScreen(
+                onNavigateBack = { navController.popBackStack() },
+            )
+        }
+
+        composable<SmartScannerDestinations.IdPhoto> {
+            PassportPhotoScreen(
                 onNavigateBack = { navController.popBackStack() },
             )
         }
