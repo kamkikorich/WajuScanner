@@ -20,6 +20,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.wajuscanner.pdf.PdfGenerator
 import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.face.FaceDetection
+import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.google.mlkit.vision.segmentation.Segmentation
 import com.google.mlkit.vision.segmentation.selfie.SelfieSegmenterOptions
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -63,6 +65,14 @@ class PassportPhotoViewModel @Inject constructor(
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message
 
+    /** False = kamera belakang (default), true = kamera depan (mod self).*/
+    private val _selfMode = MutableStateFlow(false)
+    val selfMode: StateFlow<Boolean> = _selfMode
+
+    fun toggleSelfMode() {
+        _selfMode.value = !_selfMode.value
+    }
+
     /**
      * Lazy supaya model segmentasi hanya dimuat pada foto pertama diproses.
      * SINGLE_IMAGE_MODE: setiap foto diproses berasingan (tiada smoothing
@@ -76,6 +86,19 @@ class PassportPhotoViewModel @Inject constructor(
         Segmentation.getClient(options)
     }
     private val segmenter get() = segmenterLazy.value
+
+    /**
+     * Pengesan muka (bundled ML Kit, offline) — mengukur kotak muka supaya
+     * pangkas ikut nisbah rasmi: muka = 50–60% tinggi foto (JIM/ICAO).
+     */
+    private val faceDetectorLazy = lazy {
+        val options = FaceDetectorOptions.Builder()
+            .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
+            .setMinFaceSize(0.25f)
+            .build()
+        FaceDetection.getClient(options)
+    }
+    private val faceDetector get() = faceDetectorLazy.value
 
     /** Tangkapan kamera diterima; close ImageProxy selepas byte dibaca. */
     fun onCaptured(imageProxy: ImageProxy) {
@@ -123,7 +146,7 @@ class PassportPhotoViewModel @Inject constructor(
      * a. Decode JPEG (cap sisi panjang 2048) → b. komposit latar putih →
      * c. potong tengah ke nisbah 35:50 (sisi panjang dikekalkan).
      */
-    private fun processPhoto(bytes: ByteArray, rotationDegrees: Int): Bitmap {
+    private suspend fun processPhoto(bytes: ByteArray, rotationDegrees: Int): Bitmap {
         val source = decodeCapped(bytes, rotationDegrees)
         val person = try {
             compositeOverWhite(source)
@@ -131,7 +154,50 @@ class PassportPhotoViewModel @Inject constructor(
             // Segmenter tidak sedia/gagal: kekalkan foto asal (tiada ganti latar putih).
             source
         }
-        return centerCrop35x50(person)
+        return try {
+            autoCropStandard(person)
+        } catch (e: Exception) {
+            // Pengesan muka gagal: pangkas tengah seperti sebelum ini.
+            centerCrop35x50(person)
+        }
+    }
+
+    /**
+     * Pangkas ikut standard foto pasport Malaysia (JIM/ICAO):
+     * tinggi muka (dagu→mahkota) = 50–60% tinggi crop (sasaran 55%),
+     * margin atas ~10 mm (20%), nisbah 35:50. Kotak muka ML Kit menutupi
+     * kawasan dagu→dahi sahaja; jadi tinggi kepala penuh dianggarkan
+     * kotak × 1.28 (rambut tampak di atas kotak).
+     */
+    private suspend fun autoCropStandard(source: Bitmap): Bitmap {
+        val faces = Tasks.await(faceDetector.process(InputImage.fromBitmap(source, 0)))
+        val face = faces.maxByOrNull { it.boundingBox.width() * it.boundingBox.height() }
+            ?: throw IllegalStateException("Tiada muka dijumpai untuk auto-crop.")
+
+        val box = face.boundingBox
+        val faceH = box.height().coerceAtLeast(1)
+        val headH = faceH * 1.28f
+        val targetHeadFraction = 0.55f
+        val cropH = (headH / targetHeadFraction).roundToInt()
+        val cropW = (cropH * (35f / 50f)).roundToInt()
+
+        // Mahkota dianggarkan 20% tinggi kotak di atas kotak muka (dahi).
+        val crownY = box.top - (faceH * 0.20f).roundToInt()
+        val marginTop = (cropH * 0.20f).roundToInt()
+
+        var left = box.centerX() - cropW / 2
+        var top = crownY - marginTop
+
+        // Tolak sempad bitmap (jangka kepala terlalu rapat pinggir bingkai).
+        left = left.coerceIn(0, (source.width - cropW).coerceAtLeast(0))
+        top = top.coerceIn(0, (source.height - cropH).coerceAtLeast(0))
+        val w = cropW.coerceAtMost(source.width)
+        val h = cropH.coerceAtMost(source.height)
+        if (w < cropW * 0.7f || h < cropH * 0.7f) {
+            // Bingkai terlalu sempit untuk standard — biar fallback lakukan.
+            throw IllegalStateException("Bingkai terlalu sempit untuk nisbah pasport.")
+        }
+        return Bitmap.createBitmap(source, left, top, w, h).also { source.recycle() }
     }
 
     /** Decode JPEG + putar ikut rotasi sensor + cap sisi panjang kepada 2048 px. */
@@ -202,7 +268,9 @@ class PassportPhotoViewModel @Inject constructor(
             throw e
         }
 
-        // 2. salinan sumber * alpha mask (SRC_IN).
+        // 2. banding salinan sumber dengan mask: DST_IN mengekalkan IMEJ
+        //    sumber di mana alpha mask tinggi (SRC_IN tersilap — ia mengekalkan
+        //    mask putih, lalu hasil jadi putih kosong).
         val masked = Bitmap.createBitmap(source.width, source.height, Bitmap.Config.ARGB_8888)
         val maskedCanvas = Canvas(masked)
         maskedCanvas.drawBitmap(source, 0f, 0f, bitmapPaint())
@@ -210,7 +278,7 @@ class PassportPhotoViewModel @Inject constructor(
             alphaMask,
             null,
             RectF(0f, 0f, source.width.toFloat(), source.height.toFloat()),
-            bitmapPaint().apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN) },
+            bitmapPaint().apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN) },
         )
         alphaMask.recycle()
 
@@ -360,6 +428,9 @@ class PassportPhotoViewModel @Inject constructor(
     override fun onCleared() {
         if (segmenterLazy.isInitialized()) {
             runCatching { segmenterLazy.value.close() }
+        }
+        if (faceDetectorLazy.isInitialized()) {
+            runCatching { faceDetectorLazy.value.close() }
         }
         super.onCleared()
     }

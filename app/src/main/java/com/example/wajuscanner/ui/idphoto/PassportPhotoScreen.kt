@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -182,37 +183,56 @@ private fun CameraCaptureContent(viewModel: PassportPhotoViewModel) {
             )
             .build()
     }
+    // Mod self (kamera depan). Bind dilakukan semula bila mod ditukar.
+    val selfMode by viewModel.selfMode.collectAsStateWithLifecycle()
+    val providerState = remember { mutableStateOf<ProcessCameraProvider?>(null) }
+    val previewView = remember {
+        PreviewView(context).apply {
+            scaleType = PreviewView.ScaleType.FILL_CENTER
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        runCatching { providerState.value = ProcessCameraProvider.getInstance(context).get() }
+    }
+    LaunchedEffect(providerState.value, selfMode) {
+        val provider = providerState.value ?: return@LaunchedEffect
+        val preview = Preview.Builder().build().also {
+            it.setSurfaceProvider(previewView.surfaceProvider)
+        }
+        try {
+            provider.unbindAll()
+            provider.bindToLifecycle(
+                lifecycleOwner,
+                if (selfMode) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA,
+                preview,
+                imageCapture,
+            )
+        } catch (_: Exception) {
+            // Kamera tidak tersedia pada peranti ini.
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
-            factory = { ctx ->
-                val previewView = PreviewView(ctx).apply {
-                    scaleType = PreviewView.ScaleType.FILL_CENTER
-                }
-
-                val providerFuture = ProcessCameraProvider.getInstance(ctx)
-                providerFuture.addListener({
-                    val provider = providerFuture.get()
-                    val preview = Preview.Builder().build().also {
-                        it.setSurfaceProvider(previewView.surfaceProvider)
-                    }
-                    try {
-                        provider.unbindAll()
-                        provider.bindToLifecycle(
-                            lifecycleOwner,
-                            CameraSelector.DEFAULT_BACK_CAMERA,
-                            preview,
-                            imageCapture,
-                        )
-                    } catch (_: Exception) {
-                        // Kamera tidak tersedia pada peranti ini.
-                    }
-                }, ContextCompat.getMainExecutor(ctx))
-
-                previewView
-            },
+            factory = { previewView },
         )
+        IconButton(
+            onClick = { viewModel.toggleSelfMode() },
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 16.dp, end = 16.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Cameraswitch,
+                contentDescription = "Tukar kamera hadapan / belakang",
+                tint = Color.White,
+                modifier = Modifier
+                    .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
+                    .padding(8.dp),
+            )
+        }
         GuideOverlay(modifier = Modifier.fillMaxSize())
         Button(
             onClick = { takePhoto(context, imageCapture, viewModel) },
@@ -272,7 +292,7 @@ private fun GuideOverlay(modifier: Modifier) {
             )
             Spacer(Modifier.height(16.dp))
             Text(
-                text = "Letakkan kepala dalam bulatan. Latar belakang putih diganti secara automatik.",
+                text = "Rapatkan kepala dalam panduan oval — potongan automatik ikut standard pasport (muka 50–60% tinggi foto).",
                 color = Color.White,
                 style = MaterialTheme.typography.labelMedium,
                 modifier = Modifier

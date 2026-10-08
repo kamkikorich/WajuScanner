@@ -23,6 +23,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            // ID debug kini = applicationId penuh (tanpa suffix), sejak
+            // kunci asal CN=WajuScanner tiada di PC ini dan app asal
+            // telah di-uninstall dengan kebenaran Walt — build seterusnya
+            // sama key debug ini, update in-place aman.
+        }
         release {
             optimization {
                 enable = false
@@ -92,6 +98,7 @@ dependencies {
     implementation(libs.mlkit.text.recognition)
     implementation(libs.mlkit.barcode.scanning)
     implementation(libs.mlkit.segmentation.selfie)
+    implementation(libs.mlkit.face.detection)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
