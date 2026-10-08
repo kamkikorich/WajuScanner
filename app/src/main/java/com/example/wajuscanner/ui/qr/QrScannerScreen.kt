@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,18 +31,24 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -102,6 +110,12 @@ fun QrScannerScreen(
 
     val cameraHolder = remember { CameraHolder() }
     var flashOn by remember { mutableStateOf(false) }
+    var showHistory by remember { mutableStateOf(false) }
+    val imagePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) viewModel.decodeFromImage(context, uri)
+    }
 
     Scaffold(
         topBar = {
@@ -113,6 +127,22 @@ fun QrScannerScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = {
+                        imagePicker.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    }) {
+                        Icon(
+                            imageVector = Icons.Filled.PhotoLibrary,
+                            contentDescription = "Imbas dari galeri",
+                        )
+                    }
+                    IconButton(onClick = { showHistory = true }) {
+                        Icon(
+                            imageVector = Icons.Filled.History,
+                            contentDescription = "Sejarah imbasan",
+                        )
+                    }
                     IconButton(onClick = {
                         cameraHolder.camera?.cameraControl?.enableTorch(!flashOn)
                         flashOn = !flashOn
@@ -149,6 +179,13 @@ fun QrScannerScreen(
                 )
             }
         }
+    }
+
+    if (showHistory) {
+        QrHistorySheet(
+            viewModel = viewModel,
+            onDismiss = { showHistory = false },
+        )
     }
 }
 
@@ -365,6 +402,17 @@ private fun ResultListener(viewModel: QrViewModel) {
             onScanAgain = viewModel::resumeScanning,
         )
     }
+    if (state is QrUiState.DecodeFailed) {
+        val message = (state as QrUiState.DecodeFailed).message
+        AlertDialog(
+            onDismissRequest = viewModel::resumeScanning,
+            title = { Text("Imbas dari imej gagal") },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = viewModel::resumeScanning) { Text("OK") }
+            },
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -425,6 +473,93 @@ private fun FoundDialog(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("Imbas Lagi")
+            }
+        }
+    }
+}
+
+/**
+ * Sejarah imbasan (CamScanner parity): hasil kod tidak hilang lagi dahulu —
+ * senarai terkini boleh disalin/dikongsi semula, dipadam satu-satu atau
+ * dikosongkan sepenuhnya.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun QrHistorySheet(
+    viewModel: QrViewModel,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    val history by viewModel.history.collectAsStateWithLifecycle()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val timeFormat = remember { java.text.SimpleDateFormat("dd MMM yyyy HH:mm", java.util.Locale.getDefault()) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Sejarah Imbasan",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.weight(1f),
+            )
+            if (history.isNotEmpty()) {
+                TextButton(onClick = viewModel::clearHistory) {
+                    Text("Kosongkan")
+                }
+            }
+        }
+        if (history.isEmpty()) {
+            Text(
+                text = "Tiada rekod lagi. Kod yang diimbas akan tersimpan di sini.",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 24.dp),
+            )
+        } else {
+            androidx.compose.foundation.lazy.LazyColumn(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(bottom = 24.dp),
+            ) {
+                items(history, key = { it.id }) { entry ->
+                    Column(modifier = Modifier.padding(horizontal = 12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = entry.content,
+                                    fontFamily = FontFamily.Monospace,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    text = timeFormat.format(java.util.Date(entry.timestamp)),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            TextButton(onClick = { copyToClipboard(context, entry.content) }) {
+                                Text("Salin")
+                            }
+                            IconButton(onClick = { viewModel.deleteHistoryEntry(entry.id) }) {
+                                Icon(Icons.Filled.Delete, contentDescription = "Padam rekod")
+                            }
+                        }
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                        )
+                    }
+                }
             }
         }
     }

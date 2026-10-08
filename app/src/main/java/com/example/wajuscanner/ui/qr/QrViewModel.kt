@@ -5,6 +5,9 @@ import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.wajuscanner.data.local.db.dao.QrResultDao
+import com.example.wajuscanner.data.local.db.entity.QrResultEntity
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.ZoomSuggestionOptions
@@ -12,8 +15,11 @@ import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
@@ -28,7 +34,9 @@ import javax.inject.Inject
  * draw a real-time highlight around the code(s) in the frame.
  */
 @HiltViewModel
-class QrViewModel @Inject constructor() : ViewModel() {
+class QrViewModel @Inject constructor(
+    private val qrResultDao: QrResultDao,
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow<QrUiState>(QrUiState.Scanning)
     val uiState: StateFlow<QrUiState> = _uiState
@@ -116,6 +124,7 @@ class QrViewModel @Inject constructor() : ViewModel() {
                 val first = barcodes.firstOrNull { !it.rawValue.isNullOrBlank() }
                 if (first != null) {
                     _uiState.update { QrUiState.Found(first.rawValue!!) }
+                    saveHistory(first.rawValue!!, first.format)
                 }
             }
             .addOnCompleteListener {
@@ -128,6 +137,70 @@ class QrViewModel @Inject constructor() : ViewModel() {
     /** Called when the user dismisses the "found" dialog. */
     fun resumeScanning() {
         _uiState.value = QrUiState.Scanning
+    }
+
+    // ---- Sejarah imbasan ----
+
+    /**
+     * Kandungan terakhir yang diimbas. Pengesanan berlaku setiap frame,
+     * jadi kandungan sama tidak ditulis dua kali (elak sejarah bertindih).
+     */
+    private var lastSavedContent: String? = null
+
+    val history: StateFlow<List<QrResultEntity>> =
+        qrResultDao.observeHistory()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private fun saveHistory(content: String, format: Int) {
+        if (content == lastSavedContent) return
+        lastSavedContent = content
+        viewModelScope.launch {
+            runCatching { qrResultDao.insert(QrResultEntity(content = content, format = format)) }
+        }
+    }
+
+    fun deleteHistoryEntry(id: Long) {
+        viewModelScope.launch { runCatching { qrResultDao.deleteById(id) } }
+    }
+
+    fun clearHistory() {
+        viewModelScope.launch { runCatching { qrResultDao.clearAll() } }
+    }
+
+    // ---- Imbas dari imej galeri ----
+
+    /**
+     * Decode barcode daripada imej galeri (CamScanner parity). Dimangka
+     * [Found] bila berjaya (dialog hasil yang sama dipaparkan) dan [DecodeFailed]
+     * bila tiada kod boleh dibaca.
+     */
+    fun decodeFromImage(context: android.content.Context, uri: android.net.Uri) {
+        val input = try {
+            InputImage.fromFilePath(context, uri)
+        } catch (e: Exception) {
+            _uiState.value = QrUiState.DecodeFailed(
+                e.localizedMessage ?: "Gagal membuka imej."
+            )
+            return
+        }
+        scanner.process(input)
+            .addOnSuccessListener { barcodes ->
+                val first = barcodes.firstOrNull { !it.rawValue.isNullOrBlank() }
+                if (first != null) {
+                    lastSavedContent = null // imej berbeza: benarkan simpan lagi
+                    _uiState.update { QrUiState.Found(first.rawValue!!) }
+                    saveHistory(first.rawValue!!, first.format)
+                } else {
+                    _uiState.value = QrUiState.DecodeFailed(
+                        "Tiada kod QR/barcode dijumpai dalam imej ini."
+                    )
+                }
+            }
+            .addOnFailureListener { e ->
+                _uiState.value = QrUiState.DecodeFailed(
+                    e.localizedMessage ?: "Gagal memproses imej."
+                )
+            }
     }
 
     /** Called when the UI finishes applying the zoom suggestion. */
@@ -147,6 +220,7 @@ sealed interface QrUiState {
     data object Scanning : QrUiState
     data class Found(val value: String) : QrUiState
     data class ZoomSuggested(val ratio: Float) : QrUiState
+    data class DecodeFailed(val message: String) : QrUiState
 }
 
 /** Source-image dimensions plus rotation, used for bounding-box projection. */

@@ -4,9 +4,11 @@ import android.content.Context
 import androidx.room.Room
 import com.example.wajuscanner.data.local.db.AppDatabase
 import com.example.wajuscanner.data.local.db.MIGRATION_1_2
+import com.example.wajuscanner.data.local.db.MIGRATION_2_3
 import com.example.wajuscanner.data.local.db.dao.DocumentDao
 import com.example.wajuscanner.data.local.db.dao.OcrResultDao
 import com.example.wajuscanner.data.local.db.dao.PageDao
+import com.example.wajuscanner.data.local.db.dao.QrResultDao
 import com.example.wajuscanner.data.repository.DocumentRepositoryImpl
 import com.example.wajuscanner.domain.repository.DocumentRepository
 import dagger.Module
@@ -32,7 +34,7 @@ object AppModule {
             AppDatabase::class.java,
             "smart_scanner_db"
         )
-            .addMigrations(MIGRATION_1_2)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
             .build()
     }
 
@@ -50,6 +52,11 @@ object AppModule {
     @Singleton
     fun provideOcrResultDao(database: AppDatabase): OcrResultDao =
         database.ocrResultDao()
+
+    @Provides
+    @Singleton
+    fun provideQrResultDao(database: AppDatabase): QrResultDao =
+        database.qrResultDao()
 
     @Provides
     @Singleton
