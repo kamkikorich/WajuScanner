@@ -1,10 +1,12 @@
 package com.example.wajuscanner.ui.home
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,7 +17,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Portrait
 import androidx.compose.material.icons.filled.QrCodeScanner
@@ -43,6 +47,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -113,6 +118,21 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+            val draft = when (val s = state) {
+                is HomeUiState.Success -> s.mostRecentDraft
+                is HomeUiState.Empty -> s.mostRecentDraft
+                else -> null
+            }
+            HomeHeroCard()
+            Spacer(modifier = Modifier.height(12.dp))
+            QuickActionGrid(
+                hasDraft = draft != null,
+                onScanClick = onScanClick,
+                onQrScanClick = onQrScanClick,
+                onIdPhotoClick = onIdPhotoClick,
+                onResumeDraft = { draft?.id?.let(onResumeDraft) },
+            )
+            Spacer(modifier = Modifier.height(12.dp))
             when (val currentState = state) {
                 is HomeUiState.Loading -> LoadingContent()
                 is HomeUiState.Empty -> {
@@ -431,4 +451,157 @@ private class PreviewDocumentRepository : DocumentRepository {
     override suspend fun deleteDocument(id: Long) = true
     override suspend fun markAsExported(id: Long) = true
     override suspend fun searchIncludingOcr(query: String): List<Document> = emptyList()
+}
+
+// ---- Hero + tindakan pantas (Stitch Redesign 2026) ----
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HomeHeroCard() {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+        ),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.app_name),
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Dokumen anda sedia diimbas.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = MaterialTheme.shapes.medium,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.DocumentScanner,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun QuickActionGrid(
+    hasDraft: Boolean,
+    onScanClick: () -> Unit,
+    onQrScanClick: () -> Unit,
+    onIdPhotoClick: () -> Unit,
+    onResumeDraft: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            ActionTile(
+                label = "Imbas Dokumen",
+                hint = "Kamera → PDF",
+                icon = Icons.Default.DocumentScanner,
+                tint = MaterialTheme.colorScheme.primaryContainer,
+                onClick = onScanClick,
+                modifier = Modifier.weight(1f),
+            )
+            ActionTile(
+                label = "Imbas Kod QR",
+                hint = "Hadapan & galeri",
+                icon = Icons.Default.QrCodeScanner,
+                tint = MaterialTheme.colorScheme.primaryContainer,
+                onClick = onQrScanClick,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            ActionTile(
+                label = "Foto Rasmi",
+                hint = "Pasport 35×50",
+                icon = Icons.Filled.Portrait,
+                tint = MaterialTheme.colorScheme.primaryContainer,
+                onClick = onIdPhotoClick,
+                modifier = Modifier.weight(1f),
+            )
+            if (hasDraft) {
+                ActionTile(
+                    label = "Draf Tertunggak",
+                    hint = "Sambung imbasan",
+                    icon = Icons.Default.History,
+                    tint = MaterialTheme.colorScheme.secondaryContainer,
+                    onClick = onResumeDraft,
+                    modifier = Modifier.weight(1f),
+                )
+            } else {
+                ActionTile(
+                    label = "Cari Dokumen",
+                    hint = "Nama & teks OCR",
+                    icon = Icons.Default.Search,
+                    tint = MaterialTheme.colorScheme.primaryContainer,
+                    onClick = {},
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ActionTile(
+    label: String,
+    hint: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    tint: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        onClick = onClick,
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        shape = MaterialTheme.shapes.extraLarge,
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .background(color = tint, shape = MaterialTheme.shapes.medium),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(text = label, style = MaterialTheme.typography.titleSmall)
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = hint,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }
