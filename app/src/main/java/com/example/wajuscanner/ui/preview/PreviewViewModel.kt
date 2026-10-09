@@ -2,9 +2,11 @@ package com.example.wajuscanner.ui.preview
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.wajuscanner.domain.model.DocumentFilter
 import com.example.wajuscanner.domain.model.Page
 import com.example.wajuscanner.domain.repository.DocumentRepository
 import com.example.wajuscanner.domain.usecase.ManagePagesUseCase
+import com.example.wajuscanner.domain.usecase.ProcessPageUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,7 +16,8 @@ import javax.inject.Inject
 @HiltViewModel
 class PreviewViewModel @Inject constructor(
     private val documentRepository: DocumentRepository,
-    private val managePagesUseCase: ManagePagesUseCase
+    private val managePagesUseCase: ManagePagesUseCase,
+    private val processPageUseCase: ProcessPageUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<PreviewUiState>(PreviewUiState.Loading)
@@ -86,10 +89,35 @@ class PreviewViewModel @Inject constructor(
         }
     }
 
+    /** Rotates a page 90° clockwise in place (also regenerates its thumbnail). */
+    fun rotatePage(pageId: Long) {
+        val currentDocumentId = documentId
+        if (currentDocumentId == -1L) return
+
+        viewModelScope.launch {
+            val result = processPageUseCase.applyEdit(
+                pageId = pageId,
+                rotationDegrees = 90,
+                filter = DocumentFilter.ORIGINAL,
+            )
+            result.fold(
+                onSuccess = {
+                    val pages = documentRepository.getPagesForDocument(currentDocumentId)
+                    refresh(currentDocumentId, pages)
+                },
+                onFailure = { e ->
+                    _uiState.value = PreviewUiState.Error(e.localizedMessage ?: "Failed to rotate page")
+                }
+            )
+        }
+    }
+
+    private var revision = 0L
+
     private suspend fun refresh(documentId: Long, pages: List<Page>) {
         val document = documentRepository.getDocumentById(documentId)
         if (document != null) {
-            _uiState.value = PreviewUiState.Success(document, pages)
+            _uiState.value = PreviewUiState.Success(document, pages, revision = ++revision)
         }
     }
 }

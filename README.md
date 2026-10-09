@@ -2,7 +2,8 @@
 
 **Smart Scanner 2026 — private, offline-first Android scanner.** Camera → multi-page
 document → watermarked PDF + on-device OCR + QR/barcode scanning with real-time
-bounding boxes. No account, no API keys, no data leaves the device.
+bounding boxes. No account needed; nothing leaves the device unless you opt in to
+the optional, bring-your-own-key AI.
 
 [![CI status](https://github.com/kamkikorich/WajuScanner/actions/workflows/build.yml/badge.svg)](https://github.com/kamkikorich/WajuScanner/actions/workflows/build.yml)
 
@@ -27,18 +28,21 @@ bounding boxes. No account, no API keys, no data leaves the device.
   them into a single page. Best-effort OCR on the front side becomes the document
   filename.
 - **Offline-first** — Room database, private files directory. OCR, PDF export, and
-  barcode detection never leave the device. The only network calls are the optional
-  ML Kit model download on first use.
+  barcode detection never leave the device.
+- **Optional AI (BYOK)** — bring your own API key (Gemini or any OpenAI-compatible
+  endpoint) to summarise, extract fields from, or ask questions about a document.
+  Off by default; the key is encrypted on-device, and nothing is sent unless you
+  run an AI action.
 
 ## Tech stack
 
-Jetpack Compose · Material 3 · Hilt · Room · WorkManager · CameraX · ML Kit
+Jetpack Compose · Material 3 · Hilt · Room · DataStore · CameraX · ML Kit
 (Bundled Document Scanner 16.0.0, Text Recognition 16.0.1, Barcode Scanning 17.3.0)
 
 - **minSdk** 26 (Android 8.0) — `targetSdk` 37
-- **Kotlin** 2.2.10, **JDK** 21
+- **Kotlin** 2.4.20, **JDK** 21
 - **Architecture**: clean (domain / data / ui), single-Activity Navigation Compose,
-  sealed UiState per screen, WorkManager-backed OCR pipeline
+  sealed UiState per screen, on-device OCR pipeline
 
 ## Build from source
 
@@ -74,9 +78,12 @@ request — see [`.github/workflows/build.yml`](.github/workflows/build.yml).
 | Permission | Why |
 |------------|-----|
 | `CAMERA`   | Required for document scan, ID-card scan, and QR/barcode scan |
+| `INTERNET` | Only used if you enable the optional BYOK AI (your own API key) |
 
-WajuScanner does not request `INTERNET`, `READ_MEDIA_IMAGES`, storage, or location.
-The only data leaving the device is whatever you explicitly export or share.
+WajuScanner works fully offline. It does not request `READ_MEDIA_IMAGES`, storage,
+or location. `INTERNET` is exercised only when you explicitly enable the optional
+AI feature and run an AI action — then the document's OCR text is sent to the AI
+provider you configured. Otherwise the app makes no network calls.
 
 ## Project layout
 
@@ -100,7 +107,7 @@ app/src/main/java/com/example/wajuscanner/
 ├── domain/
 │   ├── model/                   Document, Page, PdfOptions, PdfCompressionMode
 │   ├── repository/              DocumentRepository
-│   └── usecase/                 ScanDocument, ManagePages, RunOcr, Export, OcrWorker
+│   └── usecase/                 ScanDocument, ManagePages, RunOcr, Export, ProcessPage
 ├── pdf/                         PdfGenerator + filters
 ├── image/                       image utilities (combine, watermark, scale)
 └── core/

@@ -10,10 +10,12 @@ import com.example.wajuscanner.ui.detail.DocumentDetailScreen
 import com.example.wajuscanner.ui.editor.EditorScreen
 import com.example.wajuscanner.ui.home.HomeScreen
 import com.example.wajuscanner.ui.home.HomeViewModel
+import com.example.wajuscanner.ui.library.LibraryScreen
 import com.example.wajuscanner.ui.ocr.OcrResultScreen
 import com.example.wajuscanner.ui.idphoto.PassportPhotoScreen
 import com.example.wajuscanner.ui.qr.QrScannerScreen
 import com.example.wajuscanner.ui.resume.ResumeScanScreen
+import com.example.wajuscanner.ui.scanner.DocumentCaptureScreen
 import com.example.wajuscanner.ui.scanner.ScannerScreen
 import com.example.wajuscanner.ui.settings.SettingsScreen
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -49,9 +51,6 @@ fun WajuScannerNavGraph(
                 onScanClick = {
                     navController.navigate(SmartScannerDestinations.Scanner)
                 },
-                onDocumentClick = { documentId ->
-                    navController.navigate(SmartScannerDestinations.Detail(documentId))
-                },
                 onSettingsClick = {
                     navController.navigate(SmartScannerDestinations.Settings)
                 },
@@ -64,11 +63,38 @@ fun WajuScannerNavGraph(
                 onResumeDraft = { documentId ->
                     navController.navigate(SmartScannerDestinations.ResumeDraft(documentId))
                 },
+                onOpenLibrary = {
+                    navController.navigate(SmartScannerDestinations.Library)
+                },
+            )
+        }
+
+        composable<SmartScannerDestinations.Library> {
+            LibraryScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onDocumentClick = { documentId ->
+                    navController.navigate(SmartScannerDestinations.Detail(documentId))
+                },
+                onScanClick = {
+                    navController.navigate(SmartScannerDestinations.Scanner)
+                },
             )
         }
 
         composable<SmartScannerDestinations.Scanner> {
             ScannerScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onDocumentCreated = { documentId ->
+                    navController.navigate(SmartScannerDestinations.Detail(documentId))
+                },
+                onOpenCamera = {
+                    navController.navigate(SmartScannerDestinations.DocumentCapture)
+                },
+            )
+        }
+
+        composable<SmartScannerDestinations.DocumentCapture> {
+            DocumentCaptureScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onDocumentCreated = { documentId ->
                     navController.navigate(SmartScannerDestinations.Detail(documentId))

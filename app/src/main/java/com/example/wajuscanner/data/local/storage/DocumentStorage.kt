@@ -40,7 +40,7 @@ class DocumentStorage @Inject constructor(
         documentId: Long,
         pageOrder: Int,
         bitmap: Bitmap,
-        quality: Int = Constants.JPEG_QUALITY_BALANCED
+        quality: Int = Constants.JPEG_QUALITY_PAGE
     ): Pair<File, File?> {
         val docDir = getDocumentDirectory(documentId)
         val imageFile = File(docDir, "page_${pageOrder}.${Constants.IMAGE_EXTENSION}")

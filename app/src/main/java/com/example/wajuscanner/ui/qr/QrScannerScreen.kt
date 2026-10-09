@@ -6,6 +6,8 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.ContactsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -84,6 +86,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.wajuscanner.ui.theme.InkSurfaceDark
+import com.google.mlkit.vision.barcode.common.Barcode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -283,7 +286,7 @@ private fun CameraViewfinder(viewModel: QrViewModel, holder: CameraHolder) {
                 val analysis = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
-                    .also { it.setAnalyzer(ctx.mainExecutor, analyzer) }
+                    .also { it.setAnalyzer(ContextCompat.getMainExecutor(ctx), analyzer) }
 
                 try {
                     provider.unbindAll()
@@ -402,7 +405,7 @@ private fun ResultListener(viewModel: QrViewModel) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     if (state is QrUiState.Found) {
         FoundDialog(
-            value = (state as QrUiState.Found).value,
+            payload = (state as QrUiState.Found).payload,
             onScanAgain = viewModel::resumeScanning,
         )
     }
@@ -422,7 +425,7 @@ private fun ResultListener(viewModel: QrViewModel) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FoundDialog(
-    value: String,
+    payload: QrPayload,
     onScanAgain: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -439,24 +442,29 @@ private fun FoundDialog(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = "QR Dijumpai",
+                text = "QR Dijumpai · ${typeLabel(payload.type)}",
                 style = MaterialTheme.typography.titleLarge,
             )
-            if (isLikelyUrl(value)) {
-                UrlLinkText(value)
-            } else {
-                Text(
-                    text = value,
+            val url = payload.url
+            when {
+                url != null -> UrlLinkText(url)
+                payload.type == Barcode.TYPE_WIFI -> WifiDetails(payload)
+                isLikelyUrl(payload.rawValue) -> UrlLinkText(payload.rawValue)
+                else -> Text(
+                    text = payload.rawValue,
                     fontFamily = FontFamily.Monospace,
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
+
+            PrimaryQrAction(payload)
+
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 OutlinedButton(
-                    onClick = { shareText(context, value) },
+                    onClick = { shareText(context, payload.rawValue) },
                     modifier = Modifier.weight(1f),
                 ) {
                     Icon(Icons.Filled.Share, contentDescription = null)
@@ -464,7 +472,7 @@ private fun FoundDialog(
                     Text("Kongsi")
                 }
                 Button(
-                    onClick = { copyToClipboard(context, value) },
+                    onClick = { copyToClipboard(context, payload.rawValue) },
                     modifier = Modifier.weight(1f),
                 ) {
                     Icon(Icons.Filled.ContentCopy, contentDescription = null)
@@ -480,6 +488,104 @@ private fun FoundDialog(
             }
         }
     }
+}
+
+@Composable
+private fun WifiDetails(payload: QrPayload) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        payload.wifiSsid?.let {
+            Text("Rangkaian: $it", style = MaterialTheme.typography.bodyLarge)
+        }
+        payload.wifiPassword?.let {
+            Text(
+                text = "Kata laluan: $it",
+                fontFamily = FontFamily.Monospace,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+    }
+}
+
+/** Tindakan utama mengikut jenis kod (trend: skener bertindak atas kandungan, bukan sekadar teks). */
+@Composable
+private fun PrimaryQrAction(payload: QrPayload) {
+    val context = LocalContext.current
+    val action: Pair<String, () -> Unit>? = when (payload.type) {
+        Barcode.TYPE_URL -> payload.url?.let { url -> "Buka Pautan" to { openUrl(context, url) } }
+        Barcode.TYPE_WIFI -> {
+            val password = payload.wifiPassword
+            val ssid = payload.wifiSsid
+            when {
+                password != null -> "Salin Kata Laluan" to { copyToClipboard(context, password) }
+                ssid != null -> "Salin Nama WiFi" to { copyToClipboard(context, ssid) }
+                else -> null
+            }
+        }
+        Barcode.TYPE_PHONE -> payload.phone?.let { number -> "Panggil" to { dial(context, number) } }
+        Barcode.TYPE_SMS -> payload.phone?.let { number -> "Hantar SMS" to { sendSms(context, number) } }
+        Barcode.TYPE_EMAIL -> payload.email?.let { address -> "Hantar E-mel" to { sendEmail(context, address) } }
+        Barcode.TYPE_GEO -> {
+            val lat = payload.lat
+            val lng = payload.lng
+            if (lat != null && lng != null) "Buka dalam Peta" to { openMap(context, lat, lng) } else null
+        }
+        Barcode.TYPE_CONTACT_INFO -> "Tambah Kenalan" to {
+            addContact(context, payload.contactName, payload.phone, payload.email)
+        }
+        else -> null
+    }
+    action?.let { (label, run) ->
+        Button(onClick = run, modifier = Modifier.fillMaxWidth()) { Text(label) }
+    }
+}
+
+private fun typeLabel(type: Int): String = when (type) {
+    Barcode.TYPE_URL -> "Pautan"
+    Barcode.TYPE_WIFI -> "WiFi"
+    Barcode.TYPE_PHONE -> "Telefon"
+    Barcode.TYPE_SMS -> "SMS"
+    Barcode.TYPE_EMAIL -> "E-mel"
+    Barcode.TYPE_GEO -> "Lokasi"
+    Barcode.TYPE_CONTACT_INFO -> "Kenalan"
+    Barcode.TYPE_CALENDAR_EVENT -> "Acara"
+    Barcode.TYPE_PRODUCT -> "Produk"
+    Barcode.TYPE_ISBN -> "ISBN"
+    Barcode.TYPE_TEXT -> "Teks"
+    else -> "Kod"
+}
+
+private fun startExternal(context: Context, intent: Intent) {
+    runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+}
+
+private fun openUrl(context: Context, url: String) {
+    startExternal(context, Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+}
+
+private fun dial(context: Context, number: String) {
+    startExternal(context, Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + Uri.encode(number))))
+}
+
+private fun sendSms(context: Context, number: String) {
+    startExternal(context, Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + Uri.encode(number))))
+}
+
+private fun sendEmail(context: Context, address: String) {
+    startExternal(context, Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:" + Uri.encode(address))))
+}
+
+private fun openMap(context: Context, lat: Double, lng: Double) {
+    startExternal(context, Intent(Intent.ACTION_VIEW, Uri.parse("geo:$lat,$lng?q=$lat,$lng")))
+}
+
+private fun addContact(context: Context, name: String?, phone: String?, email: String?) {
+    val intent = Intent(Intent.ACTION_INSERT).apply {
+        type = ContactsContract.Contacts.CONTENT_TYPE
+        name?.let { putExtra(ContactsContract.Intents.Insert.NAME, it) }
+        phone?.let { putExtra(ContactsContract.Intents.Insert.PHONE, it) }
+        email?.let { putExtra(ContactsContract.Intents.Insert.EMAIL, it) }
+    }
+    startExternal(context, intent)
 }
 
 /**

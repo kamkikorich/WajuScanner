@@ -26,16 +26,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.wajuscanner.R
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,17 +48,10 @@ fun OcrResultScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val clipboard = LocalClipboardManager.current
     val snackbarHostState = remember { SnackbarHostState() }
-    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(pageId) {
         viewModel.runOcrInitial(pageId)
-    }
-
-    LaunchedEffect(state) {
-        val s = state
-        if (s is OcrUiState.Done) {
-            snackbarHostState.showSnackbar("Copied to clipboard")
-        }
     }
 
     Scaffold(
@@ -77,6 +71,7 @@ fun OcrResultScreen(
                     if (state is OcrUiState.Done && (state as OcrUiState.Done).text.isNotBlank()) {
                         IconButton(onClick = {
                             clipboard.setText(AnnotatedString((state as OcrUiState.Done).text))
+                            scope.launch { snackbarHostState.showSnackbar("Disalin ke papan klip") }
                         }) {
                             Icon(
                                 imageVector = Icons.Default.ContentCopy,

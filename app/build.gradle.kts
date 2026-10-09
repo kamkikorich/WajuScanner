@@ -54,6 +54,12 @@ android {
     }
 }
 
+ksp {
+    // Eksport skema Room ke app/schemas/<db>/<version>.json — asas untuk
+    // migration test dan sejarah skema yang boleh disemak.
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
 
@@ -71,6 +77,7 @@ dependencies {
     // Core
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.navigation.compose)
+    implementation(libs.kotlinx.serialization.json)
 
     // Hilt
     implementation(libs.hilt.android)
@@ -83,9 +90,8 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 
-    // WorkManager
-    implementation(libs.androidx.work.runtime.ktx)
-    implementation("androidx.hilt:hilt-work:1.4.0")
+    // DataStore (tetapan app + kunci AI BYOK)
+    implementation(libs.androidx.datastore.preferences)
 
     // CameraX
     implementation(libs.androidx.camera.core)

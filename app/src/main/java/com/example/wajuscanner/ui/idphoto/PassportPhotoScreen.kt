@@ -17,6 +17,7 @@ import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import com.example.wajuscanner.core.camera.CameraStabilization
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -42,6 +44,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -174,17 +177,11 @@ fun PassportPhotoScreen(
 private fun CameraCaptureContent(viewModel: PassportPhotoViewModel) {
     val context = LocalContext.current
     val lifecycleOwner: LifecycleOwner = LocalLifecycleOwner.current
-    val imageCapture = remember {
-        ImageCapture.Builder()
-            .setResolutionSelector(
-                ResolutionSelector.Builder()
-                    .setResolutionStrategy(ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY)
-                    .build(),
-            )
-            .build()
-    }
+    // ImageCapture dibina selepas mengetahui kamera terpilih (untuk penstabilan).
+    val imageCaptureHolder = remember { mutableStateOf<ImageCapture?>(null) }
     // Mod self (kamera depan). Bind dilakukan semula bila mod ditukar.
     val selfMode by viewModel.selfMode.collectAsStateWithLifecycle()
+    val whiteBackground by viewModel.whiteBackground.collectAsStateWithLifecycle()
     val providerState = remember { mutableStateOf<ProcessCameraProvider?>(null) }
     val previewView = remember {
         PreviewView(context).apply {
@@ -197,19 +194,28 @@ private fun CameraCaptureContent(viewModel: PassportPhotoViewModel) {
     }
     LaunchedEffect(providerState.value, selfMode) {
         val provider = providerState.value ?: return@LaunchedEffect
+        val selector = if (selfMode) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA
+        val builder = ImageCapture.Builder()
+            // Kualiti JPEG maksimum + resolusi tertinggi yang disokong sensor.
+            .setJpegQuality(100)
+            .setResolutionSelector(
+                ResolutionSelector.Builder()
+                    .setResolutionStrategy(ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY)
+                    .build(),
+            )
+        // Anti-shake: hidupkan penstabilan jika kamera ini menyokongnya.
+        CameraStabilization.apply(builder, provider, selector)
+        val capture = builder.build()
         val preview = Preview.Builder().build().also {
             it.setSurfaceProvider(previewView.surfaceProvider)
         }
         try {
             provider.unbindAll()
-            provider.bindToLifecycle(
-                lifecycleOwner,
-                if (selfMode) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA,
-                preview,
-                imageCapture,
-            )
+            provider.bindToLifecycle(lifecycleOwner, selector, preview, capture)
+            imageCaptureHolder.value = capture
         } catch (_: Exception) {
             // Kamera tidak tersedia pada peranti ini.
+            imageCaptureHolder.value = null
         }
     }
 
@@ -234,8 +240,27 @@ private fun CameraCaptureContent(viewModel: PassportPhotoViewModel) {
             )
         }
         GuideOverlay(modifier = Modifier.fillMaxSize())
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 92.dp)
+                .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
+                .padding(horizontal = 12.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = "Ganti latar putih",
+                color = Color.White,
+                style = MaterialTheme.typography.labelLarge,
+            )
+            Switch(
+                checked = whiteBackground,
+                onCheckedChange = { viewModel.setWhiteBackground(it) },
+            )
+        }
         Button(
-            onClick = { takePhoto(context, imageCapture, viewModel) },
+            onClick = { imageCaptureHolder.value?.let { takePhoto(context, it, viewModel) } },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 32.dp),

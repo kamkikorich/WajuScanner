@@ -1,13 +1,5 @@
 package com.example.wajuscanner.domain.usecase
 
-import android.content.Context
-import android.graphics.Bitmap
-import android.net.Uri
-import androidx.work.Constraints
-import androidx.work.ExistingWorkPolicy
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
-import androidx.work.workDataOf
 import com.example.wajuscanner.core.common.Constants
 import com.example.wajuscanner.core.util.BitmapUtils
 import com.example.wajuscanner.data.local.db.dao.OcrResultDao
@@ -17,7 +9,6 @@ import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
@@ -38,7 +29,6 @@ sealed interface OcrOutcome {
 
 @Singleton
 class RunOcrUseCase @Inject constructor(
-    @ApplicationContext private val context: Context,
     private val pageDao: PageDao,
     private val ocrResultDao: OcrResultDao,
     private val documentRepository: DocumentRepositoryImpl
@@ -57,25 +47,28 @@ class RunOcrUseCase @Inject constructor(
 
         val outcome = try {
             val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-            val inputImage = InputImage.fromBitmap(bitmap, 0)
-            val visionText = Tasks.await(
-                recognizer.process(inputImage),
-                45, TimeUnit.SECONDS
-            )
-            recognizer.close()
-
-            val text = visionText.text.trim()
-            if (text.isEmpty()) {
-                OcrOutcome.Empty
-            } else {
-                ocrResultDao.upsert(
-                    com.example.wajuscanner.data.local.db.entity.OcrResultEntity(
-                        pageId = pageId,
-                        text = text
-                    )
+            try {
+                val inputImage = InputImage.fromBitmap(bitmap, 0)
+                val visionText = Tasks.await(
+                    recognizer.process(inputImage),
+                    45, TimeUnit.SECONDS
                 )
-                documentRepository.updatePageOcrText(pageId, text)
-                OcrOutcome.Success(text)
+
+                val text = visionText.text.trim()
+                if (text.isEmpty()) {
+                    OcrOutcome.Empty
+                } else {
+                    ocrResultDao.upsert(
+                        com.example.wajuscanner.data.local.db.entity.OcrResultEntity(
+                            pageId = pageId,
+                            text = text
+                        )
+                    )
+                    documentRepository.updatePageOcrText(pageId, text)
+                    OcrOutcome.Success(text)
+                }
+            } finally {
+                recognizer.close()
             }
         } catch (e: Exception) {
             OcrOutcome.Failure(e.localizedMessage ?: "OCR failed")
@@ -83,24 +76,6 @@ class RunOcrUseCase @Inject constructor(
             bitmap.recycle()
         }
         outcome
-    }
-
-    /**
-     * Enqueues a background OCR job for [pageId] via WorkManager.
-     */
-    fun enqueueBackgroundOcr(pageId: Long) {
-        val request = OneTimeWorkRequestBuilder<OcrWorker>()
-            .setConstraints(
-                Constraints.Builder().setRequiresBatteryNotLow(true).build()
-            )
-            .setInputData(workDataOf(OcrWorker.KEY_PAGE_ID to pageId))
-            .addTag(Constants.OCR_WORK_TAG)
-            .build()
-        WorkManager.getInstance(context).enqueueUniqueWork(
-            "ocr_page_$pageId",
-            ExistingWorkPolicy.REPLACE,
-            request
-        )
     }
 
     /**

@@ -5,10 +5,12 @@ import androidx.lifecycle.viewModelScope
 import com.example.wajuscanner.data.local.storage.DocumentStorage
 import com.example.wajuscanner.domain.repository.DocumentRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 data class SettingsUiState(
@@ -32,8 +34,9 @@ class SettingsViewModel @Inject constructor(
     fun refresh() {
         viewModelScope.launch {
             val count = documentRepository.observeDocuments().first()?.size ?: 0
+            val storageBytes = withContext(Dispatchers.IO) { storage.calculateStorageUsage() }
             _uiState.value = SettingsUiState(
-                storageBytes = storage.calculateStorageUsage(),
+                storageBytes = storageBytes,
                 documentCount = count
             )
         }

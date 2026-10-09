@@ -10,6 +10,7 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
+import android.graphics.Rect
 import android.graphics.RectF
 import android.net.Uri
 import android.os.Build
@@ -33,7 +34,9 @@ import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
@@ -71,6 +74,19 @@ class PassportPhotoViewModel @Inject constructor(
 
     fun toggleSelfMode() {
         _selfMode.value = !_selfMode.value
+    }
+
+    /**
+     * True = ganti latar dengan putih (selfie segmentation). False = kekalkan
+     * latar asal foto. Penggantian latar melembutkan sedikit tepi siluet
+     * (had topeng model), jadi pengguna boleh matikannya untuk ketajaman tepi
+     * maksimum.
+     */
+    private val _whiteBackground = MutableStateFlow(true)
+    val whiteBackground: StateFlow<Boolean> = _whiteBackground
+
+    fun setWhiteBackground(enabled: Boolean) {
+        _whiteBackground.value = enabled
     }
 
     /**
@@ -121,7 +137,9 @@ class PassportPhotoViewModel @Inject constructor(
         _uiState.value = IdPhotoUiState.Processing
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                _uiState.value = IdPhotoUiState.Result(processPhoto(bytes, rotationDegrees))
+                _uiState.value = IdPhotoUiState.Result(
+                    processPhoto(bytes, rotationDegrees, _whiteBackground.value)
+                )
             } catch (e: Exception) {
                 _message.value = e.localizedMessage ?: "Gagal memproses foto."
                 _uiState.value = IdPhotoUiState.Camera
@@ -146,12 +164,17 @@ class PassportPhotoViewModel @Inject constructor(
      * a. Decode JPEG (cap sisi panjang 2048) → b. komposit latar putih →
      * c. potong tengah ke nisbah 35:50 (sisi panjang dikekalkan).
      */
-    private suspend fun processPhoto(bytes: ByteArray, rotationDegrees: Int): Bitmap {
+    private suspend fun processPhoto(bytes: ByteArray, rotationDegrees: Int, replaceBackground: Boolean): Bitmap {
         val source = decodeCapped(bytes, rotationDegrees)
-        val person = try {
-            compositeOverWhite(source)
-        } catch (e: Exception) {
-            // Segmenter tidak sedia/gagal: kekalkan foto asal (tiada ganti latar putih).
+        val person = if (replaceBackground) {
+            try {
+                compositeOverWhite(source)
+            } catch (e: Exception) {
+                // Segmenter tidak sedia/gagal: kekalkan foto asal (tiada ganti latar putih).
+                source
+            }
+        } else {
+            // Pengguna pilih kekalkan latar asal — tiada segmentation, tepi lebih tajam.
             source
         }
         return try {
@@ -170,11 +193,25 @@ class PassportPhotoViewModel @Inject constructor(
      * kotak × 1.28 (rambut tampak di atas kotak).
      */
     private suspend fun autoCropStandard(source: Bitmap): Bitmap {
-        val faces = Tasks.await(faceDetector.process(InputImage.fromBitmap(source, 0)))
-        val face = faces.maxByOrNull { it.boundingBox.width() * it.boundingBox.height() }
+        var bitmap = source
+        var face = detectFace(bitmap)
             ?: throw IllegalStateException("Tiada muka dijumpai untuk auto-crop.")
 
-        val box = face.boundingBox
+        // Auto-level: betulkan guling kepala guna sudut rasmi ML Kit
+        // (headEulerAngleZ). Pengesahan kendiri: hanya guna hasil putaran jika
+        // sudut baki benar-benar mengecil (elak arah putaran tersilap).
+        if (abs(face.roll) >= DESKEW_MIN_DEGREES) {
+            val deskewed = rotateBy(bitmap, face.roll)
+            val residual = detectFace(deskewed)
+            if (residual != null && abs(residual.roll) < abs(face.roll)) {
+                bitmap = deskewed
+                face = residual
+            } else {
+                deskewed.recycle()
+            }
+        }
+
+        val box = face.box
         val faceH = box.height().coerceAtLeast(1)
         val headH = faceH * 1.28f
         val targetHeadFraction = 0.55f
@@ -189,15 +226,44 @@ class PassportPhotoViewModel @Inject constructor(
         var top = crownY - marginTop
 
         // Tolak sempad bitmap (jangka kepala terlalu rapat pinggir bingkai).
-        left = left.coerceIn(0, (source.width - cropW).coerceAtLeast(0))
-        top = top.coerceIn(0, (source.height - cropH).coerceAtLeast(0))
-        val w = cropW.coerceAtMost(source.width)
-        val h = cropH.coerceAtMost(source.height)
+        left = left.coerceIn(0, (bitmap.width - cropW).coerceAtLeast(0))
+        top = top.coerceIn(0, (bitmap.height - cropH).coerceAtLeast(0))
+        val w = cropW.coerceAtMost(bitmap.width)
+        val h = cropH.coerceAtMost(bitmap.height)
         if (w < cropW * 0.7f || h < cropH * 0.7f) {
             // Bingkai terlalu sempit untuk standard — biar fallback lakukan.
             throw IllegalStateException("Bingkai terlalu sempit untuk nisbah pasport.")
         }
-        return Bitmap.createBitmap(source, left, top, w, h).also { source.recycle() }
+
+        val cropped = Bitmap.createBitmap(bitmap, left, top, w, h)
+        setOf(bitmap, source).forEach { if (it !== cropped) it.recycle() }
+        return cropped
+    }
+
+    /** Muka terbesar dalam imej: kotak + sudut guling (headEulerAngleZ). */
+    private data class FaceInfo(val box: Rect, val roll: Float)
+
+    private suspend fun detectFace(bitmap: Bitmap): FaceInfo? =
+        Tasks.await(
+            faceDetector.process(InputImage.fromBitmap(bitmap, 0)),
+            FACE_TIMEOUT_SECONDS,
+            TimeUnit.SECONDS
+        ).maxByOrNull { it.boundingBox.width() * it.boundingBox.height() }
+            ?.let { FaceInfo(it.boundingBox, it.headEulerAngleZ) }
+
+    /**
+     * Putar [src] mengikut darjah (positif = mengikut arah jam), sudut lutsinar
+     * dipenuhkan putih. [src] tidak dikitar semula — pemanggil yang uruskan.
+     */
+    private fun rotateBy(src: Bitmap, degrees: Float): Bitmap {
+        val matrix = Matrix().apply { postRotate(degrees) }
+        val rotated = Bitmap.createBitmap(src, 0, 0, src.width, src.height, matrix, true)
+        val out = Bitmap.createBitmap(rotated.width, rotated.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(out)
+        canvas.drawColor(Color.WHITE)
+        canvas.drawBitmap(rotated, 0f, 0f, bitmapPaint())
+        if (rotated !== src) rotated.recycle()
+        return out
     }
 
     /** Decode JPEG + putar ikut rotasi sensor + cap sisi panjang kepada 2048 px. */
@@ -246,7 +312,11 @@ class PassportPhotoViewModel @Inject constructor(
      * exception disampai — pemanggil mengekalkan foto asal.
      */
     private fun compositeOverWhite(source: Bitmap): Bitmap {
-        val mask = Tasks.await(segmenter.process(InputImage.fromBitmap(source, 0)))
+        val mask = Tasks.await(
+            segmenter.process(InputImage.fromBitmap(source, 0)),
+            SEGMENT_TIMEOUT_SECONDS,
+            TimeUnit.SECONDS
+        )
         val maskW = mask.width
         val maskH = mask.height
 
@@ -317,7 +387,7 @@ class PassportPhotoViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 _message.value = null
-                val bytes = encodePng(current.photo)
+                val bytes = withContext(Dispatchers.IO) { encodePng(current.photo) }
                 withContext(Dispatchers.IO) {
                     savePngToGallery(context, bytes, "pasport_${System.currentTimeMillis()}.png")
                 }
@@ -404,6 +474,12 @@ class PassportPhotoViewModel @Inject constructor(
             color = CUT_GUIDE_COLOR
         }
         val drawPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+
+        // Pra-skala foto ke saiz sel SEKALI (kaedah bertahap) supaya lukisan
+        // ke dalam sel menjadi 1:1 — elak aliasing dan cetakan lebih tajam
+        // berbanding mengecilkan ~3.5x sekali gus semasa drawBitmap.
+        val cellPhoto = downscaleHighQuality(photo, PHOTO_W.roundToInt(), PHOTO_H.roundToInt())
+
         val cell = RectF()
         val startX = (SHEET_WIDTH - (SHEET_COLS * PHOTO_W + (SHEET_COLS + 1) * GAP)) / 2f
         val startY = (SHEET_HEIGHT - (SHEET_ROWS * PHOTO_H + (SHEET_ROWS + 1) * GAP)) / 2f
@@ -412,11 +488,37 @@ class PassportPhotoViewModel @Inject constructor(
                 val left = startX + GAP + col * (PHOTO_W + GAP)
                 val top = startY + GAP + row * (PHOTO_H + GAP)
                 cell.set(left, top, left + PHOTO_W, top + PHOTO_H)
-                canvas.drawBitmap(photo, null, cell, drawPaint)
+                canvas.drawBitmap(cellPhoto, null, cell, drawPaint)
                 canvas.drawRect(cell, guide)
             }
         }
+        if (cellPhoto !== photo) cellPhoto.recycle()
         return sheet
+    }
+
+    /**
+     * Skala turun berkualiti tinggi: halving bertahap (setiap langkah 2x guna
+     * penapisan bilinear, anggaran penapis box) sebelum langkah akhir tepat.
+     * Mengelak aliasing yang berlaku bila sumber jauh lebih besar daripada sel.
+     * Mengembalikan [src] sendiri jika sudah tepat saiz sasaran.
+     */
+    private fun downscaleHighQuality(src: Bitmap, targetW: Int, targetH: Int): Bitmap {
+        var current = src
+        var w = src.width
+        var h = src.height
+        while (w / 2 >= targetW && h / 2 >= targetH) {
+            val next = Bitmap.createScaledBitmap(current, (w / 2).coerceAtLeast(1), (h / 2).coerceAtLeast(1), true)
+            if (current !== src) current.recycle()
+            current = next
+            w = current.width
+            h = current.height
+        }
+        if (w != targetW || h != targetH) {
+            val next = Bitmap.createScaledBitmap(current, targetW, targetH, true)
+            if (current !== src) current.recycle()
+            current = next
+        }
+        return current
     }
 
     private fun encodePng(bitmap: Bitmap): ByteArray {
@@ -438,6 +540,15 @@ class PassportPhotoViewModel @Inject constructor(
     private companion object {
         /** Cap sisi panjang untuk decode tangkapan. */
         const val MAX_EDGE = 2048
+
+        /** Had masa pengesan muka (elak hang pada peranti bermasalah). */
+        const val FACE_TIMEOUT_SECONDS = 10L
+
+        /** Kecondongan minimum (darjah) sebelum auto-level dijalankan. */
+        const val DESKEW_MIN_DEGREES = 1.0f
+
+        /** Had masa segmentasi selfie (elak hang pada peranti bermasalah). */
+        const val SEGMENT_TIMEOUT_SECONDS = 15L
 
         /** Subfolder galeri aplikasi. */
         const val GALLERY_FOLDER = "Pictures/WajuScanner"

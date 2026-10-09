@@ -6,7 +6,6 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Paint
-import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.net.Uri
@@ -17,10 +16,24 @@ import java.io.FileOutputStream
 import java.io.IOException
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
+
+/**
+ * Susun atur helaian Kad ID pada kertas A4 (rujuk [ImageUtils.idCardSheetLayout]).
+ * Semua nilai dalam piksel.
+ */
+data class IdCardSheetLayout(
+    val sheetWidth: Int,
+    val sheetHeight: Int,
+    val cardWidth: Int,
+    val cardHeight: Int,
+    val labelHeight: Int,
+    val gap: Int,
+    val startX: Int,
+    val startY: Int,
+)
 
 object ImageUtils {
-
-    private enum class CombineOrientation { VERTICAL, HORIZONTAL }
 
     /**
      * Loads a downsampled bitmap from a file path, respecting max dimension limits to avoid OOM.
@@ -32,12 +45,25 @@ object ImageUtils {
 
         options.inSampleSize = calculateInSampleSize(options.outWidth, options.outHeight, maxDimension)
         options.inJustDecodeBounds = false
-        return BitmapFactory.decodeFile(path, options)
+        val decoded = BitmapFactory.decodeFile(path, options) ?: return null
+
+        // inSampleSize hanya kuasa 2; skala tepat supaya hasil betul-betul ≤ maxDimension
+        // TANPA membuang resolusi berlebihan.
+        val scaled = scaleDownIfNeeded(decoded, maxDimension)
+        if (scaled !== decoded) decoded.recycle()
+        return scaled
     }
 
+    /**
+     * Pilih `inSampleSize` (kuasa 2) yang TIDAK terlalu agresif: hanya dibahagi dua
+     * selagi hasil bahagi itu masih >= [maxDimension]. Ini mengelak kehilangan
+     * resolusi besar (cth. imej 2412px TIDAK lagi dipotong jadi 1206px).
+     */
     fun calculateInSampleSize(width: Int, height: Int, maxDimension: Int): Int {
         var inSampleSize = 1
-        while ((width / inSampleSize) > maxDimension || (height / inSampleSize) > maxDimension) {
+        while ((width / inSampleSize) / 2 >= maxDimension ||
+            (height / inSampleSize) / 2 >= maxDimension
+        ) {
             inSampleSize *= 2
         }
         return inSampleSize
@@ -103,133 +129,101 @@ object ImageUtils {
     }
 
     /**
-     * Combines two bitmaps vertically (top = [top], bottom = [bottom]) into a
-     * single bitmap, scaled to a common width. Used for ID-card mode: front
-     * and back of the card on ONE page (same approach as NAPS2 "Combine").
+     * Susun atur helaian Kad ID: kad diletak pada saiz FIZIKAL sebenar
+     * (85.6 × 54 mm, ISO/IEC 7810 ID-1) atas helaian bersaiz A4 — bukan
+     * diregangkan memenuhi halaman. Ini kelakuan "ID copy" mesin fotokopi:
+     * cetakan 1:1, jimat dakwat. Fungsi tulen (boleh diuji tanpa Android).
      */
-    fun combineVertical(top: Bitmap, bottom: Bitmap, dividerPx: Int = 8): Bitmap {
-        return combine(listOf(top, bottom), CombineOrientation.VERTICAL, dividerPx)
+    fun idCardSheetLayout(vertical: Boolean): IdCardSheetLayout {
+        val sheetWidth = Constants.ID_SHEET_WIDTH_PX
+        val sheetHeight = Constants.ID_SHEET_HEIGHT_PX
+        val pxPerMm = sheetWidth.toFloat() / Constants.A4_WIDTH_MM
+        val cardWidth = (Constants.ID_CARD_WIDTH_MM * pxPerMm).roundToInt()
+        val cardHeight = (Constants.ID_CARD_HEIGHT_MM * pxPerMm).roundToInt()
+        val labelHeight = (Constants.ID_CARD_LABEL_MM * pxPerMm).roundToInt()
+        val gap = (Constants.ID_CARD_GAP_MM * pxPerMm).roundToInt()
+
+        val cellHeight = cardHeight + labelHeight
+        val blockWidth = if (vertical) cardWidth else cardWidth * 2 + gap
+        val blockHeight = if (vertical) cellHeight * 2 + gap else cellHeight
+
+        return IdCardSheetLayout(
+            sheetWidth = sheetWidth,
+            sheetHeight = sheetHeight,
+            cardWidth = cardWidth,
+            cardHeight = cardHeight,
+            labelHeight = labelHeight,
+            gap = gap,
+            startX = (sheetWidth - blockWidth) / 2,
+            startY = (sheetHeight - blockHeight) / 2,
+        )
     }
 
     /**
-     * Combines two bitmaps horizontally ([left], [right]) into a single bitmap,
-     * scaled to a common height. Useful for wide-format ID cards (driver's
-     * license) where the front and back read better side-by-side.
+     * Gabungkan dua sisi kad ID pada SATU helaian A4 dengan saiz cetakan 1:1
+     * (rujuk [idCardSheetLayout]). Label sisi dilukis DI BAWAH setiap kad
+     * supaya tidak menutupi teks kad. Pemanggil punya kitaran hidup bitmap ini.
      */
-    fun combineHorizontal(left: Bitmap, right: Bitmap, dividerPx: Int = 8): Bitmap {
-        return combine(listOf(left, right), CombineOrientation.HORIZONTAL, dividerPx)
-    }
-
-    /**
-     * Combines any number of bitmaps in the given orientation onto a single
-     * bitmap with a uniform background and equal-sided dividers between them.
-     * All bitmaps are scaled to a common dimension (width for vertical, height
-     * for horizontal) so the final canvas is rectangular and predictable.
-     */
-    private fun combine(
-        bitmaps: List<Bitmap>,
-        orientation: CombineOrientation,
-        dividerPx: Int,
+    fun composeIdCardSheet(
+        front: Bitmap,
+        back: Bitmap,
+        vertical: Boolean,
+        frontLabel: String,
+        backLabel: String,
     ): Bitmap {
-        require(bitmaps.isNotEmpty()) { "combine requires at least one bitmap" }
-        if (bitmaps.size == 1) return bitmaps.first()
-
-        val isVertical = orientation == CombineOrientation.VERTICAL
-        val targetDim = if (isVertical) {
-            bitmaps.minOf { it.width }
-        } else {
-            bitmaps.minOf { it.height }
-        }
-
-        val scaled = bitmaps.map { src ->
-            if (isVertical) scaleToWidth(src, targetDim) else scaleToHeight(src, targetDim)
-        }
-
-        val totalCrossDim = scaled.sumOf { if (isVertical) it.height else it.width }
-        val totalDivider = dividerPx * (scaled.size - 1)
-
-        val canvasWidth: Int
-        val canvasHeight: Int
-        if (isVertical) {
-            canvasWidth = targetDim
-            canvasHeight = totalCrossDim + totalDivider
-        } else {
-            canvasWidth = totalCrossDim + totalDivider
-            canvasHeight = targetDim
-        }
-
-        val combined = Bitmap.createBitmap(canvasWidth, canvasHeight, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(combined)
+        val layout = idCardSheetLayout(vertical)
+        val sheet = Bitmap.createBitmap(layout.sheetWidth, layout.sheetHeight, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(sheet)
         canvas.drawColor(Color.WHITE)
 
-        var cursor = 0
-        scaled.forEachIndexed { index, bmp ->
-            val offset: Int
-            if (isVertical) {
-                canvas.drawBitmap(bmp, 0f, cursor.toFloat(), null)
-                offset = bmp.height
-            } else {
-                canvas.drawBitmap(bmp, cursor.toFloat(), 0f, null)
-                offset = bmp.width
-            }
-            cursor += offset
-            if (index < scaled.size - 1) cursor += dividerPx
-        }
-        return combined
-    }
-
-    private fun scaleToWidth(bitmap: Bitmap, targetWidth: Int): Bitmap {
-        if (bitmap.width == targetWidth) return bitmap
-        val newHeight = (bitmap.height.toLong() * targetWidth / bitmap.width).toInt()
-        return Bitmap.createScaledBitmap(bitmap, targetWidth, newHeight.coerceAtLeast(1), true)
-    }
-
-    private fun scaleToHeight(bitmap: Bitmap, targetHeight: Int): Bitmap {
-        if (bitmap.height == targetHeight) return bitmap
-        val newWidth = (bitmap.width.toLong() * targetHeight / bitmap.height).toInt()
-        return Bitmap.createScaledBitmap(bitmap, newWidth.coerceAtLeast(1), targetHeight, true)
-    }
-
-    /**
-     * Menggantung [label] sebagai jalur keterangan di BAWAH imej sisi kad,
-     * bukan timbul di atas kad. Ini menjamin apa-apa teks ID (lambang JPN,
-     * nombor, tulisan kecil) tidak dilindungi oleh latar hitam label.
-     * Kembali bitmap BARU; pemanggil punya kitaran hidupnya.
-     */
-    fun captionStrip(source: Bitmap, label: String): Bitmap {
-        val stripHeight = (source.height * 0.06f).toInt().coerceAtLeast(28)
-        val textSize = (stripHeight * 0.52f).coerceAtLeast(16f)
-        val stripPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.argb(255, 30, 30, 30)
-            style = Paint.Style.FILL
-        }
-        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE
-            this.textSize = textSize
+        val imagePaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+        val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.DKGRAY
+            textSize = layout.labelHeight * 0.62f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
 
-        val bounds = Rect()
-        textPaint.getTextBounds(label, 0, label.length, bounds)
+        listOf(front to frontLabel, back to backLabel).forEachIndexed { index, (bitmap, label) ->
+            val left = if (vertical) {
+                layout.startX
+            } else {
+                layout.startX + index * (layout.cardWidth + layout.gap)
+            }
+            val top = if (vertical) {
+                layout.startY + index * (layout.cardHeight + layout.labelHeight + layout.gap)
+            } else {
+                layout.startY
+            }
+            drawCardContained(canvas, bitmap, left, top, layout.cardWidth, layout.cardHeight, imagePaint)
+            canvas.drawText(
+                label,
+                left + (layout.cardWidth - labelPaint.measureText(label)) / 2f,
+                top + layout.cardHeight + layout.labelHeight * 0.8f,
+                labelPaint,
+            )
+        }
+        return sheet
+    }
 
-        val out =
-            Bitmap.createBitmap(source.width, source.height + stripHeight, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(out)
-        canvas.drawBitmap(source, 0f, 0f, null)
-        canvas.drawRect(
-            0f,
-            source.height.toFloat(),
-            source.width.toFloat(),
-            out.height.toFloat(),
-            stripPaint,
+    /** Lukis [bitmap] "contain" (kekalkan nisbah) di tengah kotak kad. */
+    private fun drawCardContained(
+        canvas: Canvas,
+        bitmap: Bitmap,
+        left: Int,
+        top: Int,
+        boxWidth: Int,
+        boxHeight: Int,
+        paint: Paint,
+    ) {
+        val scale = min(
+            boxWidth.toFloat() / bitmap.width,
+            boxHeight.toFloat() / bitmap.height,
         )
-        canvas.drawText(
-            label,
-            (source.width - bounds.width()) / 2f,
-            source.height + (stripHeight + bounds.height()) / 2f,
-            textPaint,
-        )
-        return out
+        val width = bitmap.width * scale
+        val height = bitmap.height * scale
+        val dx = left + (boxWidth - width) / 2f
+        val dy = top + (boxHeight - height) / 2f
+        canvas.drawBitmap(bitmap, null, RectF(dx, dy, dx + width, dy + height), paint)
     }
 
     /** Loads a downscaled, EXIF-corrected bitmap directly from a content URI. */

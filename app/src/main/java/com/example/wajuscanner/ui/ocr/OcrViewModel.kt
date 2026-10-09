@@ -24,17 +24,6 @@ class OcrViewModel @Inject constructor(
     private val _uiState = MutableStateFlow<OcrUiState>(OcrUiState.Running)
     val uiState: StateFlow<OcrUiState> = _uiState
 
-    fun runOcr(pageId: Long) {
-        if (_uiState.value is OcrUiState.Running) return
-        _uiState.value = OcrUiState.Running
-        viewModelScope.launch { execute(pageId) }
-    }
-
-    init {
-        // handle the very first run when the VM is created for a page
-        // (runOcr is also callable for retries)
-    }
-
     /** First-load variant: invoked with Running preset even at fresh start. */
     fun runOcrInitial(pageId: Long) {
         _uiState.value = OcrUiState.Running

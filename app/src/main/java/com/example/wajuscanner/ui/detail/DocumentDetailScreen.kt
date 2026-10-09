@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.SaveAlt
@@ -42,7 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.wajuscanner.R
 import com.example.wajuscanner.core.util.FileUtils
@@ -70,7 +71,12 @@ fun DocumentDetailScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val exportState by exportViewModel.exportState.collectAsStateWithLifecycle()
     val pdfOptions by exportViewModel.pdfOptions.collectAsStateWithLifecycle()
+    val aiAvailable by exportViewModel.aiAvailable.collectAsStateWithLifecycle()
+    val aiState by exportViewModel.aiState.collectAsStateWithLifecycle()
+    val aiImageSupported by exportViewModel.aiImageSupported.collectAsStateWithLifecycle()
     val context = LocalContext.current
+
+    var showAi by remember { mutableStateOf(false) }
 
     var showExportDialog by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -111,6 +117,14 @@ fun DocumentDetailScreen(
                     }
                 },
                 actions = {
+                    if (aiAvailable) {
+                        IconButton(onClick = { showAi = true }) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = stringResource(R.string.ai_title)
+                            )
+                        }
+                    }
                     IconButton(
                         onClick = { exportViewModel.exportAndShare(documentId) },
                         enabled = state is PreviewUiState.Success &&
@@ -161,7 +175,8 @@ fun DocumentDetailScreen(
                         onEditPage = onEditPage,
                         onDeletePage = viewModel::deletePage,
                         onDuplicatePage = viewModel::duplicatePage,
-                        onOcrPage = onOcrPage
+                        onOcrPage = onOcrPage,
+                        onRotatePage = viewModel::rotatePage
                     )
                 }
             }
@@ -184,6 +199,20 @@ fun DocumentDetailScreen(
                 showExportDialog = false
                 exportViewModel.exportAndSave(documentId)
             }
+        )
+    }
+
+    if (showAi) {
+        AiSheet(
+            state = aiState,
+            imageSupported = aiImageSupported,
+            onRun = { action, question, useImage ->
+                exportViewModel.runAiAction(documentId, action, question, useImage)
+            },
+            onDismiss = {
+                showAi = false
+                exportViewModel.resetAi()
+            },
         )
     }
 }
@@ -274,7 +303,8 @@ private fun DetailContent(
     onEditPage: (Long) -> Unit,
     onDeletePage: (Long) -> Unit,
     onDuplicatePage: (Long) -> Unit,
-    onOcrPage: (Long) -> Unit
+    onOcrPage: (Long) -> Unit,
+    onRotatePage: (Long) -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -306,7 +336,8 @@ private fun DetailContent(
                     onEdit = { onEditPage(page.id) },
                     onDelete = { onDeletePage(page.id) },
                     onDuplicate = { onDuplicatePage(page.id) },
-                    onOcr = { onOcrPage(page.id) }
+                    onOcr = { onOcrPage(page.id) },
+                    onRotate = { onRotatePage(page.id) }
                 )
             }
         }

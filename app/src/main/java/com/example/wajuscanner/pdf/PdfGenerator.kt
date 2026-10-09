@@ -99,11 +99,12 @@ class PdfGenerator @Inject constructor(
      * does not expose a JPEG-quality encoder for embedded images — the PDF
      * writer picks its own compression — so the JPEG-quality knob only
      * affects the intermediate re-encode done by [ImageUtils.scaleDown].
-     * FULL is the legacy behaviour (2048 px), the COMPRESS tiers drop to
-     * 1500 px which is roughly the level Adobe Scan ships on its "Low" preset.
+     * FULL keeps A4 @300 dpi so a page that is already A4-sized (cth. helaian
+     * Kad ID) dicetak 1:1 tanpa diturunkan resolusi; the COMPRESS tiers drop
+     * to 1500 px, roughly the level Adobe Scan ships on its "Low" preset.
      */
     private fun resolveCompression(mode: PdfCompressionMode): Pair<Int, Int> = when (mode) {
-        PdfCompressionMode.FULL -> Constants.MAX_PREVIEW_DIMENSION to Constants.JPEG_QUALITY_BALANCED
+        PdfCompressionMode.FULL -> Constants.MAX_EXPORT_DIMENSION to Constants.JPEG_QUALITY_BALANCED
         PdfCompressionMode.COMPRESS -> 1500 to 60
         PdfCompressionMode.COMPRESS_GRAYSCALE -> 1500 to 60
     }

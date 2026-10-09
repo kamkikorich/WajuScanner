@@ -4,6 +4,7 @@ import android.content.IntentSender
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,7 +50,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.wajuscanner.R
 import com.example.wajuscanner.camera.ScannerLauncher
@@ -75,7 +76,8 @@ private const val SLOT_BACK = 1
 fun ScannerScreen(
     viewModel: ScannerViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit,
-    onDocumentCreated: (Long) -> Unit
+    onDocumentCreated: (Long) -> Unit,
+    onOpenCamera: () -> Unit
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var idCardMode by remember { mutableStateOf(false) }
@@ -88,6 +90,12 @@ fun ScannerScreen(
         contract = ActivityResultContracts.StartIntentSenderForResult()
     ) { activityResult ->
         viewModel.onScanResult(ScannerLauncher.parseScanResult(activityResult))
+    }
+    // Import galeri TANPA ML Kit (tiada auto-crop → tiada risiko miring).
+    val imageImporter = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) viewModel.importImage(uri)
     }
 
     fun launchScan() {
@@ -149,7 +157,13 @@ fun ScannerScreen(
                             idCardLayout = layout
                             viewModel.setIdCardLayout(layout)
                         },
-                        onScanClick = { launchScan() }
+                        onScanClick = { launchScan() },
+                        onImportClick = {
+                            imageImporter.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        },
+                        onOpenCamera = onOpenCamera
                     )
                 }
                 is ScannerUiState.Processing -> {
@@ -200,7 +214,9 @@ private fun ScannerIdleContent(
     idCardLayout: IdCardLayout,
     onToggleIdCardMode: () -> Unit,
     onLayoutSelected: (IdCardLayout) -> Unit,
-    onScanClick: () -> Unit
+    onScanClick: () -> Unit,
+    onImportClick: () -> Unit,
+    onOpenCamera: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -329,6 +345,12 @@ private fun ScannerIdleContent(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(stringResource(R.string.scanner_button_start))
+        }
+        OutlinedButton(onClick = onImportClick, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.scanner_button_import))
+        }
+        OutlinedButton(onClick = onOpenCamera, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.scanner_button_camera))
         }
     }
 }

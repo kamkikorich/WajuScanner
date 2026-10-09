@@ -43,7 +43,7 @@ class ScanDocumentUseCase @Inject constructor(
                 val uri = Uri.parse(uriString)
                 val bitmap = ImageUtils.loadBitmapCorrected(
                     copyUriToTempFile(uri).absolutePath,
-                    Constants.MAX_PREVIEW_DIMENSION
+                    Constants.MAX_STORED_PAGE_DIMENSION
                 ) ?: throw IllegalStateException("Failed to load scanned image: $uriString")
 
                 val (imageFile, thumbnailFile) = storage.savePageImage(
@@ -86,12 +86,10 @@ class ScanDocumentUseCase @Inject constructor(
     }
 
     /**
-     * ID-card mode: exactly two scanned sides (front + back) are combined
-     * into a SINGLE page (NAPS2-style "Combine") with a small FRONT/BACK
-     * badge drawn on each side so the two halves stay identifiable once
-     * combined. The orientation (vertical or horizontal) is controlled by
-     * [layout] — vertical is the default and matches Malaysian IC / passport
-     * inner pages, horizontal reads better for wide driver's licenses.
+     * Mod Kad ID: dua sisi (depan + belakang) diletak pada SATU helaian A4
+     * dengan saiz cetakan 1:1 — kad 85.6 × 54 mm (ISO/IEC 7810 ID-1), bukan
+     * diregangkan memenuhi halaman. Ini elak pembaziran dakwat semasa cetak.
+     * Label DEPAN/BELAK dilukis di bawah setiap kad. [layout] kawal susunan.
      */
     suspend fun invokeIdCardMode(
         documentName: String,
@@ -104,30 +102,20 @@ class ScanDocumentUseCase @Inject constructor(
                     IllegalStateException("ID card mode requires 2 sides (front + back)")
                 )
             }
-            val front = ImageUtils.loadBitmapFromUri(context, Uri.parse(pageUris[0]))
+            val front = ImageUtils.loadBitmapFromUri(context, Uri.parse(pageUris[0]), Constants.MAX_STORED_PAGE_DIMENSION)
                 ?: return@withContext Result.failure(IllegalStateException("Failed to load front side"))
-            val back = ImageUtils.loadBitmapFromUri(context, Uri.parse(pageUris[1]))
+            val back = ImageUtils.loadBitmapFromUri(context, Uri.parse(pageUris[1]), Constants.MAX_STORED_PAGE_DIMENSION)
                 ?: return@withContext Result.failure(IllegalStateException("Failed to load back side"))
 
-            val frontLabeled = ImageUtils.captionStrip(
-                front,
-                context.getString(R.string.id_side_front)
+            val combined = ImageUtils.composeIdCardSheet(
+                front = front,
+                back = back,
+                vertical = layout == IdCardLayout.VERTICAL,
+                frontLabel = context.getString(R.string.id_side_front),
+                backLabel = context.getString(R.string.id_side_back),
             )
             front.recycle()
-            val backLabeled = ImageUtils.captionStrip(
-                back,
-                context.getString(R.string.id_side_back)
-            )
             back.recycle()
-
-            val combined = when (layout) {
-                IdCardLayout.VERTICAL ->
-                    ImageUtils.combineVertical(frontLabeled, backLabeled)
-                IdCardLayout.HORIZONTAL ->
-                    ImageUtils.combineHorizontal(frontLabeled, backLabeled)
-            }
-            frontLabeled.recycle()
-            backLabeled.recycle()
 
             val documentId = documentRepository.createDocument(documentName)
             val (imageFile, thumbnailFile) = storage.savePageImage(

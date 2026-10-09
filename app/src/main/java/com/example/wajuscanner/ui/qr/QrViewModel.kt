@@ -1,6 +1,7 @@
 package com.example.wajuscanner.ui.qr
 
 import android.graphics.Rect
+import androidx.annotation.OptIn
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
@@ -87,6 +88,9 @@ class QrViewModel @Inject constructor(
             .enableAllPotentialBarcodes()
             .setZoomSuggestionOptions(
                 ZoomSuggestionOptions.Builder(zoomCallback)
+                    // Dokumen rasmi: tanpa had ini library boleh menjana nisbah
+                    // zum tidak terbatas yang tidak disokong oleh perkakasan.
+                    .setMaxSupportedZoomRatio(DEFAULT_MAX_ZOOM_RATIO)
                     .build()
             )
             .build()
@@ -96,7 +100,7 @@ class QrViewModel @Inject constructor(
      * CameraX analyzer. Callbacks run on the analyzer thread; switch back to
      * the main thread only when emitting UI state.
      */
-    @ExperimentalGetImage
+    @OptIn(markerClass = [ExperimentalGetImage::class])
     fun analyzer(): ImageAnalysis.Analyzer = ImageAnalysis.Analyzer { imageProxy ->
         val mediaImage = imageProxy.image
         if (mediaImage == null) {
@@ -121,10 +125,12 @@ class QrViewModel @Inject constructor(
                 val boxes = barcodes.mapNotNull { it.boundingBox }
                 _detectedBoxes.value = boxes
 
-                val first = barcodes.firstOrNull { !it.rawValue.isNullOrBlank() }
-                if (first != null) {
-                    _uiState.update { QrUiState.Found(first.rawValue!!) }
-                    saveHistory(first.rawValue!!, first.format)
+                val decoded = barcodes.firstOrNull { !it.rawValue.isNullOrBlank() }
+                if (decoded != null) {
+                    toPayload(decoded)?.let { payload ->
+                        _uiState.update { QrUiState.Found(payload) }
+                        saveHistory(payload.rawValue, decoded.format)
+                    }
                 }
             }
             .addOnCompleteListener {
@@ -185,11 +191,12 @@ class QrViewModel @Inject constructor(
         }
         scanner.process(input)
             .addOnSuccessListener { barcodes ->
-                val first = barcodes.firstOrNull { !it.rawValue.isNullOrBlank() }
-                if (first != null) {
+                val decoded = barcodes.firstOrNull { !it.rawValue.isNullOrBlank() }
+                val payload = decoded?.let { toPayload(it) }
+                if (decoded != null && payload != null) {
                     lastSavedContent = null // imej berbeza: benarkan simpan lagi
-                    _uiState.update { QrUiState.Found(first.rawValue!!) }
-                    saveHistory(first.rawValue!!, first.format)
+                    _uiState.update { QrUiState.Found(payload) }
+                    saveHistory(payload.rawValue, decoded.format)
                 } else {
                     _uiState.value = QrUiState.DecodeFailed(
                         "Tiada kod QR/barcode dijumpai dalam imej ini."
@@ -210,6 +217,27 @@ class QrViewModel @Inject constructor(
         }
     }
 
+    /** Petik medan yang dihurai ML Kit mengikut jenis kod barcode. */
+    private fun toPayload(barcode: Barcode): QrPayload? {
+        val raw = barcode.rawValue ?: return null
+        return when (barcode.valueType) {
+            Barcode.TYPE_URL -> QrPayload(raw, barcode.valueType, url = barcode.url?.url, title = barcode.url?.title)
+            Barcode.TYPE_WIFI -> QrPayload(raw, barcode.valueType, wifiSsid = barcode.wifi?.ssid, wifiPassword = barcode.wifi?.password)
+            Barcode.TYPE_PHONE -> QrPayload(raw, barcode.valueType, phone = barcode.phone?.number)
+            Barcode.TYPE_SMS -> QrPayload(raw, barcode.valueType, phone = barcode.sms?.phoneNumber)
+            Barcode.TYPE_EMAIL -> QrPayload(raw, barcode.valueType, email = barcode.email?.address)
+            Barcode.TYPE_GEO -> QrPayload(raw, barcode.valueType, lat = barcode.geoPoint?.lat, lng = barcode.geoPoint?.lng)
+            Barcode.TYPE_CONTACT_INFO -> QrPayload(
+                raw,
+                barcode.valueType,
+                contactName = barcode.contactInfo?.name?.formattedName,
+                phone = barcode.contactInfo?.phones?.firstOrNull()?.number,
+                email = barcode.contactInfo?.emails?.firstOrNull()?.address,
+            )
+            else -> QrPayload(raw, barcode.valueType)
+        }
+    }
+
     override fun onCleared() {
         scanner.close()
         super.onCleared()
@@ -218,10 +246,28 @@ class QrViewModel @Inject constructor(
 
 sealed interface QrUiState {
     data object Scanning : QrUiState
-    data class Found(val value: String) : QrUiState
+    data class Found(val payload: QrPayload) : QrUiState
     data class ZoomSuggested(val ratio: Float) : QrUiState
     data class DecodeFailed(val message: String) : QrUiState
 }
+
+/** Data yang dihurai ML Kit daripada barcode: jenis + medan berkaitan (untuk tindakan pintar). */
+data class QrPayload(
+    val rawValue: String,
+    val type: Int,
+    val url: String? = null,
+    val title: String? = null,
+    val wifiSsid: String? = null,
+    val wifiPassword: String? = null,
+    val phone: String? = null,
+    val email: String? = null,
+    val lat: Double? = null,
+    val lng: Double? = null,
+    val contactName: String? = null,
+)
+
+/** Had zum maksimum yang diminta daripada perpustakaan (elak nisbah tak terbatas). */
+private const val DEFAULT_MAX_ZOOM_RATIO = 4f
 
 /** Source-image dimensions plus rotation, used for bounding-box projection. */
 data class ImageInfo(

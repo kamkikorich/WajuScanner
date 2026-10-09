@@ -160,13 +160,13 @@ class ScannerViewModel @Inject constructor(
         return ScannerUiState.IdCardReview(front = front, back = back)
     }
 
-    private fun persistScannedPages(pageUris: List<String>) {
+    private fun persistScannedPages(pageUris: List<String>, asIdCard: Boolean = idCardMode) {
         _uiState.value = ScannerUiState.Processing
         viewModelScope.launch {
             val baseName = FileUtils.generateScanFileName(
-                if (idCardMode) "ID_Card" else Constants.DEFAULT_FILE_PREFIX
+                if (asIdCard) "ID_Card" else Constants.DEFAULT_FILE_PREFIX
             )
-            val documentName = if (idCardMode && pageUris.isNotEmpty()) {
+            val documentName = if (asIdCard && pageUris.isNotEmpty()) {
                 val suggested = withContext(Dispatchers.IO) {
                     runCatching {
                         IdCardNameExtractor.suggest(
@@ -178,7 +178,7 @@ class ScannerViewModel @Inject constructor(
                 if (!suggested.isNullOrBlank()) "ID_$suggested" else baseName
             } else baseName
 
-            val outcome = if (idCardMode) {
+            val outcome = if (asIdCard) {
                 scanDocumentUseCase.invokeIdCardMode(documentName, pageUris, idCardLayout)
             } else {
                 scanDocumentUseCase(documentName, pageUris)
@@ -211,5 +211,13 @@ class ScannerViewModel @Inject constructor(
     fun consumeEvent() {
         _uiState.value = ScannerUiState.Idle
         pendingReview = null
+    }
+
+    /**
+     * Import imej dari galeri TANPA melalui ML Kit Document Scanner — tiada
+     * auto-crop/perspektif, jadi imej lurus (cth. screenshot) kekal lurus.
+     */
+    fun importImage(uri: android.net.Uri) {
+        persistScannedPages(listOf(uri.toString()), asIdCard = false)
     }
 }

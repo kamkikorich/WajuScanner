@@ -10,7 +10,7 @@ jobs:
   build:
     name: Build debug APK & run unit tests
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     permissions:
       contents: read
@@ -44,6 +44,16 @@ jobs:
 
       - name: Assemble debug APK
         run: ./gradlew :app:assembleDebug
+
+      - name: Run instrumented tests (Room migration) on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: ./gradlew :app:connectedDebugAndroidTest
 
       - name: Upload debug APK as artifact
         uses: actions/upload-artifact@v4

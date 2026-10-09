@@ -6,12 +6,18 @@
     <string name="cd_settings">Open settings</string>
     <string name="cd_rename_document">Rename document</string>
     <string name="cd_delete_document">Delete document</string>
+    <string name="cd_rotate_page">Putar halaman</string>
 
     <!-- Home screen -->
-    <string name="home_empty_title">No documents yet</string>
-    <string name="home_empty_subtitle">Tap the + button to scan your first document. Your scans stay on this device.</string>
-    <string name="home_search_hint">Search documents</string>
+    <string name="home_empty_title">Belum ada dokumen</string>
+    <string name="home_empty_subtitle">Tekan butang + untuk mengimbas dokumen pertama anda. Semua imbasan disimpan dalam peranti ini sahaja.</string>
+    <string name="home_search_hint">Cari dokumen</string>
     <string name="home_document_meta">%1$d pages · %2$s</string>
+
+    <!-- Library ("Dokumen Saya") -->
+    <string name="library_title">Dokumen Saya</string>
+    <string name="library_empty_title">Tiada dokumen</string>
+    <string name="library_count">%1$d dokumen</string>
 
     <!-- Scanner screen -->
     <string name="scanner_title">Scan Document</string>
@@ -19,6 +25,13 @@
     <string name="scanner_ready_subtitle">Position your document in the frame. The scanner will detect edges automatically.</string>
     <string name="scanner_processing">Saving scanned pages…</string>
     <string name="scanner_button_start">Start Scanner</string>
+    <string name="scanner_button_import">Import imej (apa adanya)</string>
+    <string name="scanner_button_camera">Kamera (anti-shake)</string>
+    <string name="capture_title">Kamera anti-shake</string>
+    <string name="capture_button">Tangkap</string>
+    <string name="capture_saving">Menyimpan…</string>
+    <string name="capture_permission">Kamera diperlukan untuk menangkap dokumen.</string>
+    <string name="capture_grant">Beri Kebenaran</string>
     <string name="scanner_button_retry">Try Again</string>
     <string name="scanner_button_back">Back to Library</string>
     <string name="scanner_id_mode_label">Mod Kad ID</string>
@@ -59,6 +72,7 @@
 
     <!-- Document detail -->
     <string name="detail_title">Document</string>
+    <string name="ai_title">AI Dokumen</string>
     <string name="detail_share">Share document</string>
     <string name="detail_add_page">Add page</string>
     <string name="detail_meta">%1$d pages · %2$s</string>
@@ -87,7 +101,7 @@
     <string name="settings_storage_used">Used: %1$s</string>
     <string name="settings_document_count">%1$d documents</string>
     <string name="settings_privacy_title">Privacy</string>
-    <string name="settings_privacy_body">All scans, OCR and PDF processing happen entirely on this device. No data ever leaves your phone.</string>
+    <string name="settings_privacy_body">All scans, OCR and PDF processing happen entirely on this device. The optional AI feature (off by default) sends only the document text to the provider you configure with your own API key.</string>
     <string name="settings_version">WajuScanner %1$s</string>
 
     <!-- OCR -->

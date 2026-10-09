@@ -18,7 +18,7 @@ import com.example.wajuscanner.data.local.db.entity.QrResultEntity
 @Database(
     entities = [DocumentEntity::class, PageEntity::class, OcrResultEntity::class, QrResultEntity::class],
     version = 3,
-    exportSchema = false
+    exportSchema = true
 )
 @TypeConverters(DateConverter::class)
 abstract class AppDatabase : RoomDatabase() {

@@ -7,7 +7,13 @@ sealed interface SmartScannerDestinations {
     data object Home : SmartScannerDestinations
 
     @Serializable
+    data object Library : SmartScannerDestinations
+
+    @Serializable
     data object Scanner : SmartScannerDestinations
+
+    @Serializable
+    data object DocumentCapture : SmartScannerDestinations
 
     @Serializable
     data object QrScanner : SmartScannerDestinations
@@ -17,9 +23,6 @@ sealed interface SmartScannerDestinations {
 
     @Serializable
     data class Editor(val pageId: Long = -1L) : SmartScannerDestinations
-
-    @Serializable
-    data class Preview(val documentId: Long = -1L) : SmartScannerDestinations
 
     @Serializable
     data class Detail(val documentId: Long) : SmartScannerDestinations

@@ -25,10 +25,10 @@ class ScannerLauncher @Inject constructor(
 ) {
     private val options = GmsDocumentScannerOptions.Builder()
         .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)
-        .setResultFormats(
-            GmsDocumentScannerOptions.RESULT_FORMAT_JPEG,
-            GmsDocumentScannerOptions.RESULT_FORMAT_PDF
-        )
+        // JPEG sahaja: PDF dari scanner tidak pernah digunakan (app jana PDF
+        // sendiri via PdfGenerator). Dokumen ML Kit menasihati minta hanya
+        // format yang digunakan — jana PDF tambahan membuang masa/memori.
+        .setResultFormats(GmsDocumentScannerOptions.RESULT_FORMAT_JPEG)
         // setPageLimit default = -1 (unlimited). 0 adalah TIDAK SAH (min 1).
         .setGalleryImportAllowed(true)
         .build()
@@ -50,10 +50,7 @@ class ScannerLauncher @Inject constructor(
             // ID-card mode: had 2 muka (depan + belakang). setPageLimit min 1.
             val idOptions = GmsDocumentScannerOptions.Builder()
                 .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)
-                .setResultFormats(
-                    GmsDocumentScannerOptions.RESULT_FORMAT_JPEG,
-                    GmsDocumentScannerOptions.RESULT_FORMAT_PDF
-                )
+                .setResultFormats(GmsDocumentScannerOptions.RESULT_FORMAT_JPEG)
                 .setGalleryImportAllowed(true)
                 .apply { setPageLimit(pageLimit ?: 2) }
                 .build()
@@ -84,15 +81,14 @@ class ScannerLauncher @Inject constructor(
             val pages = result.getPages()?.map { page ->
                 page.getImageUri().toString()
             } ?: emptyList()
-            val pdfUri = result.getPdf()?.getUri()?.toString()
 
-            return ScannerResult.Success(pages, pdfUri)
+            return ScannerResult.Success(pages)
         }
     }
 }
 
 sealed interface ScannerResult {
     data object Cancelled : ScannerResult
-    data class Success(val pageImageUris: List<String>, val pdfUri: String?) : ScannerResult
+    data class Success(val pageImageUris: List<String>) : ScannerResult
     data class Error(val message: String) : ScannerResult
 }
